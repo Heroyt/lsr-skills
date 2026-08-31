@@ -1,55 +1,80 @@
 ---
 name: lsr-auth-session
-description: Use for LSR app authentication and sessions with lsr/auth, App\Models\Auth\User, Auth service, login/logout/register flow, auth middleware, RedisSession, and flash messages.
+description: Use for LSR authentication and session integration with lsr/auth, custom user models, login/register/logout, auth middleware, session storage, cookies, and authorization checks.
 ---
 
-# Auth + Session Workflow
+# LSR Authentication and Sessions
 
-## Read First
+## Read the Local Contract
 
-- Auth config: `config/di/extensions/auth.neon`.
-- App user class: `src/Models/Auth/User.php`.
-- Login route/controller/request/page: `routes/web.php`, `src/Http/Controllers/Auth/Login.php`, `src/Http/Requests/Auth/LoginRequest.php`, `assets/js/pages/Auth/Login.vue`.
-- Session service: `src/Core/RedisSession.php`, `config/di/services-common.neon`.
-- Auth service package: `vendor/lsr/auth/src/Services/Auth.php`.
-- Auth middleware: `vendor/lsr/auth/src/Middleware/LoggedIn.php`, `LoggedOut.php`.
-- Auth schema: `vendor/lsr/auth/migrations.neon`.
+- Read `vendor/lsr/auth/services.neon`, `migrations.neon`, and `src/Services/Auth.php`.
+- Read the application's included auth service config and migration root.
+- Identify the concrete `Lsr\Interfaces\SessionInterface` service; do not assume native files or Redis.
+- Read the concrete user model and any local role/right extensions.
+- Read auth routes, controllers, request DTOs, and middleware wiring.
+
+## Service and Schema Setup
+
+`lsr/auth` ships service definitions rather than a Nette compiler extension. Include or reproduce the installed service configuration deliberately. Override the user class through the package parameter contract:
+
+```neon
+parameters:
+	auth:
+		userClass: App\Models\Auth\User
+```
+
+Include `vendor/lsr/auth/migrations.neon` from the application's modular migration root when using the package schema. Put application-owned auth extensions in a separate domain migration file; do not edit `vendor/`.
+
+The concrete user class must remain compatible with `Lsr\Core\Auth\Models\User` and its table/primary-key expectations. Read the installed model before extending fields or role behavior.
 
 ## Auth Service
 
-- Inject `Lsr\Core\Auth\Services\Auth` when checking or changing auth state.
-- `Auth::login($email, $password, $remember = false)` verifies against the configured user class table and stores serialized user data in session key `usr`.
-- `Auth::logout()` removes the session user.
-- `Auth::register($email, $password, $name = '')` hashes passwords with Nette `Passwords` and returns the created user or `null`.
-- `Auth::getLoggedIn()` returns the current user or `null`; `loggedIn()` checks presence.
-- `Auth::hasRight($right)` and `getRights()` delegate to the logged-in user.
-- Default user roles/rights from `lsr/auth` can be overridden or extended for app-specific use cases. Do not treat the default role structure as fixed.
+Inject `Lsr\Core\Auth\Services\Auth` or the application's typed specialization.
 
-## User Model
+Current behavior:
 
-- `config/di/extensions/auth.neon` sets `auth.userClass` to `App\Models\Auth\User`.
-- The app user extends `Lsr\Core\Auth\Models\User` and sets `#[PrimaryKey('id_user')]`.
-- Keep auth schema alignment with the package migrations unless intentionally extending user fields.
-- For app-owned user extensions, update both the model and migrations.
+- `login($email, $password, $remember)` returns `bool`, verifies via Nette `Passwords`, rehashes when needed, stores serialized user state under session key `usr`, and extends session parameters for remember-me.
+- `logout()` removes `usr` and clears the in-memory user.
+- `register($email, $password, $name)` may throw `DuplicateEmailException` and returns the created user or `null`.
+- `getLoggedIn()` returns the current user or `null`.
+- `loggedIn()`, `hasRight()`, and `getRights()` expose authentication/authorization state.
 
-## Middleware and Routes
+Do not expose which part of login failed. Never log or serialize plaintext passwords. Keep password validation at the request/application interface and hashing in the auth module.
 
-- Use `LoggedOut` for pages only guests should see, such as login.
-- Use `LoggedIn` for pages that require an authenticated user.
-- Middleware is attached in `routes/web.php` through route groups or route-specific `->middleware(...)`.
-- Redirect route names should match named routes in `routes/web.php`.
+## Middleware and Authorization
 
-## Sessions and Flash Messages
+Package middleware:
 
-- The app uses `App\Core\RedisSession`, wired as the `session` service with Redis in `services-common.neon`.
-- Controllers can call `flashSuccess`, `flashError`, `flashWarning`, and `flashInfo`.
-- `Controller::init()` exposes `flashMessages` to template/Inertia parameters.
-- Session cookie handling goes through `App::cookieJar()` and LSR response cookie propagation.
+- `Lsr\Core\Auth\Middleware\LoggedIn`
+- `Lsr\Core\Auth\Middleware\LoggedOut`
 
-## Validation
+Resolve middleware through DI when it has dependencies. Attach it through the application's route/group convention.
 
-```sh
-composer phpstan
-composer cs
-php ./bin/console app:create-user user@example.com
-```
+Authentication proves identity, not permission. Use `hasRight()` or an application authorization module for protected actions, and enforce it server-side even when Vue/Latte hides controls.
+
+## Sessions and Cookies
+
+`Auth` depends on `SessionInterface`. The application owns the storage adapter, expiry policy, cookie flags, and infrastructure.
+
+- Use secure/HTTP-only/SameSite cookie settings appropriate to the deployment.
+- Rotate or otherwise protect session identity according to the concrete session implementation.
+- Scope remembered sessions explicitly.
+- Do not put service objects or secrets in session values.
+- Under long-running workers, ensure per-request session open/close and auth reinitialization follow the application's runtime lifecycle. Never let one request's auth object leak into the next.
+
+Framework response handling propagates cookies through the LSR cookie/session flow. Verify this with the actual FPM or RoadRunner entrypoint in use.
+
+## Verification
+
+Cover:
+
+- successful and failed login without account enumeration;
+- password rehash;
+- logout and session deletion;
+- duplicate registration and validation failure;
+- remembered vs normal expiry;
+- `LoggedIn` / `LoggedOut` redirects or responses;
+- authorization denial;
+- isolation between sequential RoadRunner requests when applicable.
+
+Run the application's auth tests, static analysis, and a real HTTP login/logout smoke flow.

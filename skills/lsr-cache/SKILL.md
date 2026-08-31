@@ -1,90 +1,93 @@
 ---
 name: lsr-cache
-description: Use for LSR app caching with lsr/cache, Redis storage, Cache::load/clean, model cache clearing, query cache tags, and operational cache:clean.
+description: Use for LSR cache configuration, Nette cache dependencies, file or Redis storage, namespace isolation, bulk loading, tag invalidation, query/model caching, and cache commands.
 ---
 
-# LSR Cache Workflow
+# LSR Cache
 
-## Read First
+## Establish the Storage
 
-- Cache config: `config/di/extensions/cache.neon`.
-- Cache wrapper: `vendor/lsr/cache/src/Cache.php`.
-- Redis storage: `vendor/lsr/cache/src/Redis/RedisStorage.php`, `RedisJournal.php`.
-- App base model: `src/Models/BaseModel.php`.
-- Model cache trait: `vendor/lsr/core/src/Models/WithCacheClear.php`.
-- DB fluent cache helpers: `vendor/lsr/db/src/Dibi/FetchFunctions.php`.
-- Cache clean command: `vendor/lsr/console/src/Commands/Cache/CacheCleanCommand.php`.
+Read the installed `lsr/cache` package and application DI before changing behavior:
 
-## Cache Service
+- `vendor/lsr/cache/src/Cache.php`
+- `vendor/lsr/cache/src/DI/CacheExtension.php`
+- `vendor/lsr/cache/src/Redis/{RedisStorage,RedisJournal}.php`
+- the application's cache NEON file and Redis services
 
-- Inject or fetch `Lsr\Caching\Cache` as service `cache`.
-- The app config uses Redis storage through `cache.storage`.
-- `Cache::load($key, $generator, $dependencies)` reads or generates cache values.
-- `Cache::bulkLoad(...)` supports efficient multi-key reads when storage implements bulk reading.
-- Dependencies follow Nette cache dependency keys such as `Expire`, `Tags`, and `All`.
+Do not assume Redis. `CacheExtension` currently defaults to Nette file storage and requires `cacheDir`; Redis is an explicit application service choice.
 
-## Model Cache
+Example extension configuration:
 
-- App-owned models extend `App\Models\BaseModel`.
-- `BaseModel` uses `Lsr\Core\Models\WithCacheClear`.
-- Model insert/update/delete clears tags:
-  - `Model::TABLE`
-  - `Model::TABLE . '/query'`
-  - `Model::TABLE . '/' . $id`
-  - `Model::TABLE . '/' . $id . '/relations'`
-  - any extra tags from `getCacheTags()` if the model provides it.
-- `Model::query()` automatically tags model query cache with model/table tags.
+```neon
+extensions:
+	cache: Lsr\Caching\DI\CacheExtension
 
-## DB Query Cache
+cache:
+	cacheDir: %constants.tempDir%
+	namespace: my-app
+	debug: false
+	commands: true
+```
 
-- DB fluent fetches cache by default.
-- Pass `cache: false` for fresh reads.
-- Add model table tags to DB facade queries that depend on model data:
+Read the installed schema for supported keys. Keep this config in a focused cache NEON file included by the shared root.
+
+## Redis Isolation
+
+When multiple application caches share Redis/KeyDB, give storage and journal the same application-specific namespace:
 
 ```php
-DB::select(Item::TABLE, '*')
-    ->where('id_item = %i', $id)
-    ->cacheTags(Item::TABLE)
-    ->fetch();
+$journal = new RedisJournal($redis, 'arena-control:cache:');
+$storage = new RedisStorage($redis, 'arena-control:cache:', $journal);
 ```
 
-- Relation queries should add relation-specific tags when available:
+Current Redis full-clean behavior deletes values tracked for that storage prefix and metadata owned by the journal namespace. It does not use `FLUSHALL`. Never replace this with broad Redis/database clearing on a shared instance.
+
+Legacy values created before ownership tracking may require a one-time, application-aware maintenance cleanup. Do not guess which unprefixed keys are safe to delete.
+
+## Loading and Dependencies
 
 ```php
-->cacheTags(Item::TABLE, Item::TABLE . '/' . $id . '/relations')
+$value = $cache->load(
+	$key,
+	static function (?array &$dependencies = null): Result {
+		$dependencies = [
+			Cache::Expire => '10 minutes',
+			Cache::Tags => ['articles'],
+		];
+		return loadResult();
+	},
+);
 ```
 
-## Cleaning Cache
+`Lsr\Caching\Cache` extends Nette cache. Use Nette dependency constants such as `Expire`, `Tags`, `All`, `Files`, and `Callbacks` as supported by the storage.
 
-- `cache:clean` is for operations and troubleshooting. Automated tests should not rely on manually cleaning cache.
-- Clean all system cache:
+`bulkLoad($keys, $generator)` uses storage bulk reads when available and otherwise falls back to individual loads. The generator receives the requested key and dependency reference. Use it for real batches, not as a more complicated spelling of one load.
+
+## Invalidation
+
+- Prefer deterministic keys and tag-based invalidation.
+- Include tenant, user, locale, permission, and other visibility scope in the key when the value varies by that scope.
+- Tag DB projections with every table/model they depend on.
+- If the application model base uses `WithCacheClear`, preserve its table/query/instance/relation tags.
+- Raw DB writes must explicitly invalidate every affected cache contract.
+- Do not make tests pass by calling a global cache clear; fix ownership and invalidation.
+
+## Commands
+
+When Symfony Console is installed and `commands: true`, the cache extension registers:
 
 ```sh
-php ./bin/console cache:clean
+php bin/console cache:clean
+php bin/console cache:clear
+php bin/console cache:clean --tag=articles --tag=articles/query
 ```
 
-- Alias:
+`lsr/orm` separately registers `orm:cache:clean` when enabled. Core/container/Latte generated caches use their own commands.
 
-```sh
-php ./bin/console cache:clear
-```
+## Verification
 
-- Clean only tagged records:
-
-```sh
-php ./bin/console cache:clean --tag=playlists --tag=playlists/query
-```
-
-## Rules
-
-- Prefer tag-based invalidation over broad cache clears in application code.
-- Keep cache keys deterministic and scoped by feature/entity.
-- Do not cache user-specific or permission-specific data without including the user/permission scope in the key or tags.
-- If a DB facade query depends on ORM model data, add the model table tag so model updates invalidate it.
-
-## Validation
-
-```sh
-composer phpstan
-composer cs
-```
+- Test miss -> generate -> hit behavior.
+- Test the exact invalidating write and confirm the next read regenerates.
+- For user/tenant/locale-scoped data, prove two scopes cannot see each other's cached value.
+- For Redis, use a disposable namespace and verify full clean preserves unrelated keys.
+- Run the application's cache tests and static analysis.

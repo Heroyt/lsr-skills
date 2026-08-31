@@ -1,72 +1,93 @@
 ---
 name: lsr-orm
-description: Use for LSR app model work with lsr/orm, including Model subclasses, primary keys, relations, querying, saving, caching, and migration alignment.
+description: Use for LSR ORM models, model configuration, primary keys, typed properties, querying, persistence, relations, serialization, validation, and model cache behavior.
 ---
 
-# LSR ORM Workflow
+# LSR ORM
 
-## Read First
+## Read Before Editing
 
-- Existing app models: `src/Models`.
-- Base app model: `src/Models/BaseModel.php`.
-- Current app model examples: `src/Models/Auth/User.php`, temporary example `src/Models/Playlist.php`.
-- Package APIs: `vendor/lsr/orm/src/Model.php`, `ModelQuery.php`, `ModelRepository.php`, `Attributes`, `ModelTraits`.
-- DB migrations: `config/migrations/migrations.neon`.
+- Read the installed `vendor/lsr/orm/src/Model.php`, `ModelQuery.php`, `ModelRepository.php`, attributes, relations, and traits.
+- Read the application's model base class if one exists. The framework requires `Lsr\Orm\Model`; an application-specific `BaseModel` is a local convention, not an LSR requirement.
+- Read the migration entry for every affected table.
+- Read serializer, object-validation, and cache configuration because ORM behavior composes those packages.
 
 ## Model Shape
 
-- App-owned models extend `App\Models\BaseModel`; `BaseModel` extends `Lsr\Orm\Model` and adds cache clearing through `Lsr\Core\Models\WithCacheClear`.
-- Extend package models only when customizing package behavior, such as the auth `User` model.
-- Always define `public const string TABLE = 'plural_snake_case_table';` on app-owned models. Table names are not resolved automatically.
-- Always set `#[Lsr\Orm\Attributes\PrimaryKey('id_model')]` on app-owned models. Primary keys are not resolved automatically.
-- SQL columns use `snake_case`; PHP ORM properties use `camelCase`.
-- Table names use the plural snake_case form of the PascalCase model name, for example `Playlist` -> `playlists`.
-- Primary keys use `id_{model}` in singular snake_case, for example `id_playlist`; foreign keys should use the same column name in related tables.
-- Public properties map to DB columns. CamelCase properties can map to snake_case columns through the ORM fetch/save logic.
-- Use `#[Lsr\Orm\Attributes\NoDB]` for runtime-only properties and `#[Lsr\Orm\Attributes\JsonExclude]` for serialization exclusions.
-- Use object validation attributes on model properties when they should be enforced by `save()`.
+A minimal model is explicit about its table and primary key:
+
+```php
+use Lsr\Orm\Attributes\PrimaryKey;
+use Lsr\Orm\Model;
+
+#[PrimaryKey('id_article')]
+final class Article extends Model
+{
+	public const string TABLE = 'articles';
+
+	public string $title;
+}
+```
+
+Rules:
+
+- Extend the application's established model base when it adds required behavior; otherwise extend `Model` directly.
+- Define `TABLE` explicitly. Do not assume table-name inference.
+- Define `#[PrimaryKey(...)]` explicitly unless the inherited model already owns the mapping.
+- Keep public typed properties aligned with database columns and nullability.
+- Check the installed serializer/name-conversion behavior before relying on camelCase-to-snake_case mapping.
+- Use `#[NoDB]` for runtime-only properties and `#[JsonExclude]` for values excluded from serialization when those installed attributes fit the requirement.
+- Use object-validation attributes for invariants enforced by model persistence.
 
 ## Loading and Querying
 
-- Use `Model::get($id)` to load by primary key; it participates in `ModelRepository` instance caching.
-- Use `Model::query()` for fluent model queries:
-
 ```php
-$items = Item::query()
-    ->where('active = %i', 1)
-    ->orderBy('created_at')
-    ->desc()
-    ->get();
+$article = Article::get($id);
+
+$published = Article::query()
+	->where('[published] = %i', 1)
+	->orderBy('published_at')
+	->desc()
+	->get();
 ```
 
-- Use `first()` for a nullable single model, `get()` for an array keyed by primary key, and `count()` for counts.
-- Use `cacheTags(...)` on model queries when a feature needs additional cache invalidation grouping.
+- `Model::get()` loads by primary key and participates in `ModelRepository` instance caching; handle `ModelNotFoundException` where absence is expected.
+- `first()` returns a nullable model, `get()` returns models keyed by primary key, and `count()` returns a count.
+- Use `cacheTags()` for additional application invalidation dependencies.
+- Prefer DB facade DTO projections for reporting, aggregates, bulk reads, or screens that do not need model lifecycle behavior.
 
-## Saving
+## Persistence
 
-- Create a new model, assign validated public properties, then call `$model->save()`.
-- `save()` wraps insert/update in a DB transaction and calls validation.
-- For loaded models, `save()` updates changed DB-backed properties and relations.
-- Use timestamp traits such as `WithCreatedAt` / `WithUpdatedAt` only when the table has matching columns.
+- Assign typed, validated properties and call the model persistence method used by the installed version (`save()`, `insert()`, or `update()` as appropriate).
+- Read the installed `ModelSave` trait before relying on hook order or change detection.
+- Coordinate multi-model invariants in an explicit DB transaction.
+- Use timestamp traits only when the schema contains matching columns.
+- Do not bypass model persistence with raw DB writes when validation, relations, hooks, instance caching, or cache clearing must run.
+
+`Lsr\Core\Models\WithCacheClear` is an optional application base-model trait supplied by `lsr/core`. If the application uses it, preserve its table, query, instance, and relation tag contract. It is not automatically applied to every `Lsr\Orm\Model`.
 
 ## Relations
 
-- Relation attributes are available under `Lsr\Orm\Attributes\Relations`: `ManyToOne`, `OneToOne`, `OneToMany`, `ManyToMany`.
-- Prefer explicit relation attributes over manual ID juggling when the model is the aggregate boundary.
-- For custom relation loaders or DB facade relation queries, add cache tags that include the relevant model table tag and, when appropriate, relation tags such as `Model::TABLE . '/' . $id . '/relations'`.
-- For large read-only screens, consider DB facade/DTO queries instead of hydrating broad object graphs.
+Installed relation attributes live under `Lsr\Orm\Attributes\Relations`:
 
-## Schema Alignment
+- `ManyToOne`
+- `OneToOne`
+- `OneToMany`
+- `ManyToMany`
 
-- Every DB-backed model property must match the schema in `config/migrations/migrations.neon`.
-- When adding a model or changing columns, update migrations in the same change.
-- If a migration table key uses a model class, `DbInstall` resolves the actual table from the model `TABLE` constant.
-- Keep migration table names and foreign key names aligned with the explicit `TABLE` constant and `#[PrimaryKey]` value.
+Read each constructor in the installed package before writing positional arguments. Keep relation property types, local/foreign keys, through-table schema, and migration foreign keys aligned.
 
-## Validation
+Use relations when they are part of the model's lifecycle interface. For large read-only graphs, prefer a typed projection rather than hydrating many models.
 
-```sh
-composer phpstan
-composer cs
-php ./bin/console install
-```
+## Long-Running Workers
+
+`ModelRepository` keeps static instance state. Current LSR RoadRunner HTTP and jobs workers clear it before each request/task. Any custom long-running worker must provide the same request/job isolation or prove that it never uses the ORM.
+
+Never store a loaded model in a singleton expecting it to remain fresh across requests or jobs.
+
+## Verification
+
+- Cover load, missing-row, insert/update/delete, validation failure, and relation behavior affected by the change.
+- Verify serialization for dates, enums, exclusions, aliases, and relation collections when exposed externally.
+- Run the migration update/fresh-install checks against disposable databases when schema changed.
+- Run package/application static analysis and the smallest relevant test suite.

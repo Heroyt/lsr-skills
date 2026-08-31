@@ -1,60 +1,107 @@
 ---
 name: lsr-async-jobs
-description: Use for LSR app async work with RoadRunner jobs, TaskProducer, TaskDispatcherInterface, task payloads, and async CQRS command dispatch.
+description: Use for LSR RoadRunner jobs with TaskProducer, task dispatcher and payload contracts, serializers, DI task names, queue options, acknowledgement, retries, and async CQRS adapters.
 ---
 
-# Async Jobs Workflow
+# LSR Async Jobs
 
-## Read First
+Use `lsr-roadrunner-runtime` for worker bootstrap, `.rr.yaml`, process lifecycle, and HTTP-worker isolation.
 
-- RoadRunner config: `config/di/extensions/roadrunner.neon`.
-- RoadRunner runtime config: `.rr.yaml`.
-- Task service registrations: `config/di/configs/jobs.neon`.
-- Existing task: `src/Tasks/HandleCommandTask.php`.
-- Existing payload: `src/Tasks/Payloads/HandleCommandPayload.php`.
-- Async command bus: `src/CQRS/AsyncCommandBus.php`.
-- Package APIs: `vendor/lsr/roadrunner/src/Tasks/TaskProducer.php`, `TaskDispatcherInterface.php`, `TaskPayloadInterface.php`.
+## Read the Installed Job Stack
 
-## Existing Flow
+- `vendor/lsr/roadrunner/src/Tasks/TaskProducer.php`
+- `TaskDispatcherInterface.php`
+- `TaskPayloadInterface.php`
+- `Tasks/Serializers/*`
+- `Workers/JobsWorker.php`
+- `DI/RoadrunnerExtension.php`
+- application task/payload classes, task DI definitions, and `.rr.yaml`
 
-- `Lsr\CQRS\CommandBus::dispatchAsync()` delegates to `App\CQRS\AsyncCommandBus`.
-- `App\CQRS\AsyncCommandBus` pushes `HandleCommandTask::class` with `HandleCommandPayload`.
-- `TaskProducer` uses `HandleCommandTask::getDiName()` as the RoadRunner job name.
-- `config/di/configs/jobs.neon` maps that DI name to `App\Tasks\HandleCommandTask`.
-- `.rr.yaml` consumes the `tasks` pipeline with memory queue driver and configures the jobs worker pool.
-- `HandleCommandTask` validates the payload type and dispatches the contained command synchronously inside the worker.
+Do not assume a serializer, queue name, retry policy, or app-specific CQRS bridge. Read the DI and RoadRunner runtime configuration.
 
-## Adding a Task
+## Contracts
 
-- Put dispatchers under `src/Tasks`.
-- Put payload DTOs under `src/Tasks/Payloads`.
-- Payloads implement `Lsr\Roadrunner\Tasks\TaskPayloadInterface`.
-- Dispatchers implement `Lsr\Roadrunner\Tasks\TaskDispatcherInterface`.
-- `getDiName()` must return a non-empty DI service name.
-- Register the task service in `config/di/configs/jobs.neon` using the same DI name.
-- Inject required dependencies into the dispatcher constructor through DI.
-- In `process()`, guard payload type first. Use `$task->nack('reason')` for invalid payloads.
+Payloads implement `Lsr\Roadrunner\Tasks\TaskPayloadInterface`.
 
-## Dispatching
+Dispatchers implement:
 
-- Inject `Lsr\Roadrunner\Tasks\TaskProducer` to push or plan jobs directly.
-- Use `$taskProducer->push(TaskClass::class, $payload)` for immediate dispatch.
-- Use `plan(...)` and `dispatch()` when batching multiple prepared tasks.
-- For command-shaped work, prefer `CommandBus::dispatchAsync($command)` so the existing CQRS bridge handles the job.
-- Keep async command payloads as command objects for now. Do not switch to scalar-ID payloads unless the app changes that convention.
-- Keep the default queue/runtime behavior unless a feature explicitly needs custom options such as delay, priority, or retries.
+```php
+interface TaskDispatcherInterface
+{
+	public static function getDiName(): string;
 
-## Serialization
-
-- The configured serializer is `Lsr\Roadrunner\Tasks\Serializers\IgBinaryTaskSerializer`.
-- Keep payloads and commands serializable: avoid closures, open resources, PDO/Dibi connections, and service objects in payload properties.
-- Pass IDs and scalar data; load models/services inside the task handler.
-
-## Validation
-
-```sh
-composer phpstan
-composer cs
+	public function process(
+		ReceivedTaskInterface $task,
+		?TaskPayloadInterface $payload = null,
+	): void;
+}
 ```
 
-Runtime verification requires RoadRunner jobs to be running; do not assume `push()` was processed just because it returned successfully.
+`getDiName()` must be a stable, non-empty DI service name. Register the dispatcher under exactly that name because `JobsWorker` resolves incoming task names through `App::getService($name)`.
+
+Keep task config in an included jobs NEON file:
+
+```neon
+services:
+	application.rebuildIndexTask:
+		create: App\Tasks\RebuildIndexTask
+```
+
+The static `getDiName()` for this dispatcher must return `application.rebuildIndexTask`.
+
+## Payload Design
+
+- Carry immutable scalar IDs, enums, timestamps, and small DTO data.
+- Never carry closures, streams, PDO/dibi connections, file handles, DI services, or loaded ORM graphs.
+- Prefer identifiers over serialized models; load fresh state inside `process()`.
+- Treat payload schema as a versioned interface when queued jobs may survive a deployment.
+- Verify the configured serializer supports every field. Current options include igbinary, JSON, and PHP serializers; none is universally configured.
+
+## Producing Work
+
+```php
+$producer->push(RebuildIndexTask::class, $payload, $options);
+
+$producer->plan(FirstTask::class, $firstPayload);
+$producer->plan(SecondTask::class, $secondPayload);
+$producer->dispatch();
+```
+
+`push()` sends immediately. `plan()` only accumulates prepared tasks in the producer; `dispatch()` sends and clears that batch. A successful push/dispatch proves enqueueing, not processing.
+
+Use RoadRunner `OptionsInterface` for delay, priority, retry, or pipeline behavior only when the feature requires it and `.rr.yaml` supports it.
+
+## Worker Behavior
+
+Current `JobsWorker`:
+
+1. clears `ModelRepository` instances;
+2. resolves the dispatcher by task name;
+3. deserializes a non-empty payload;
+4. calls `process()`;
+5. acknowledges if the dispatcher has not completed the task;
+6. nacks and logs thrown failures.
+
+A dispatcher may explicitly `ack`, `nack`, or requeue according to RoadRunner's task interface. Avoid acknowledging before the durable state transition succeeds. Make retryable handlers idempotent and distinguish permanent invalid payloads from transient infrastructure failures.
+
+Guard the concrete payload type at the start of `process()`. Do not let a type mismatch become partial work.
+
+## Async CQRS
+
+`lsr/cqrs` only delegates `dispatchAsync()` to the configured `AsyncCommandBusInterface`. An application may implement that adapter using `TaskProducer`, but this bridge is not supplied automatically.
+
+If commands are serialized as payloads, their interface must remain compatible with queued deployments. An ID-based job payload often gives a safer deployment seam.
+
+## Verification
+
+Run the actual jobs worker against a disposable queue and assert:
+
+- correct DI dispatcher resolution;
+- payload round trip through the configured serializer;
+- successful state transition and acknowledgement;
+- invalid payload behavior;
+- exception/nack/retry behavior;
+- duplicate delivery idempotency;
+- isolation between sequential jobs.
+
+Also run application static analysis and job tests.

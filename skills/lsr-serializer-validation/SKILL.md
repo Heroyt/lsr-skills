@@ -1,60 +1,85 @@
 ---
 name: lsr-serializer-validation
-description: Use for LSR app serialization, mapping, DTO denormalization, object validation attributes, request DTO validation, and DB fetchDto/fetchAllDto behavior.
+description: Use for LSR serializer configuration, typed mapping, normalization, object-validation attributes, mapped request DTOs, DB DTO fetches, and serialization interface safety.
 ---
 
-# Serializer + Validation Workflow
+# LSR Serializer and Object Validation
 
-## Read First
+## Read the Installed Pipeline
 
-- Serializer config: `config/di/extensions/serializer.neon`.
-- Mapper: `vendor/lsr/serializer/src/Mapper.php`.
-- Normalizers: `vendor/lsr/serializer/src/Normalizer`.
-- Object validator: `vendor/lsr/object-validation/src/Validator.php`.
-- Validation attributes: `vendor/lsr/object-validation/src/Attributes`.
-- Request mapper: `vendor/lsr/request/src/Validation/RequestValidationMapper.php`.
-- Request DTO examples: `src/Http/Requests`.
-- DB DTO fetch helpers: `vendor/lsr/db/src/Dibi/FetchFunctions.php`.
+- `vendor/lsr/serializer/src/Mapper.php`
+- `vendor/lsr/serializer/src/DI/SerializerExtensions.php`
+- installed normalizers and application-added normalizers
+- `vendor/lsr/object-validation/src/Validator.php` and `Attributes`
+- `vendor/lsr/request/src/Validation/RequestValidationMapper.php`
+- the application's serializer NEON config
 
-## Mapper
+`lsr/serializer` wraps Symfony Serializer. Exact extractor, normalizer, encoder, and context order is configuration, not a universal assumption.
 
-- Use `Lsr\Serializer\Mapper` for denormalizing arrays/rows into typed objects.
-- `Mapper::map($data, ClassName::class, $context)` delegates to Symfony Serializer denormalization.
-- This project configures `Symfony\Component\PropertyInfo\Extractor\PhpStanExtractor` for better type extraction.
-- DB fluent helpers use the serializer mapper for `fetchDto()` and `fetchAllDto()`.
+## DI Configuration
 
-## Validation Attributes
+The serializer extension currently supports base and extra extractors, normalizers, denormalizers, encoders, plus common/encoder/serializer/normalizer/denormalizer context.
 
-- Use `Lsr\ObjectValidation\Attributes` on public DTO/model properties.
-- Available common attributes include `Required`, `Email`, `StringLength`, `IntRange`, `Numeric`, `Regex`, `Url`, `Uri`, `DateString`, and `NoValidate`.
-- Use a DTO `validate()` method only for cross-field or business validation that attributes cannot express.
-- Validation may throw `ValidationException` or `ValidationMultiException`.
+Prefer adding application-specific behavior through `extra*` lists rather than replacing defaults accidentally. Keep serializer configuration in its own included NEON file. Check normalizer priority/order whenever two normalizers support the same type.
 
-## Request DTO Mapping
+`Lsr\Serializer\Mapper::map($data, ClassName::class, $context)` delegates to the configured Symfony denormalizer and can throw normalizer/partial-denormalization exceptions.
 
-- Request DTOs are mapped HTTP DTOs and belong under `src/Http/Requests`.
-- Keep request DTOs specific to request mapping. Do not reuse them as generic serializer/read DTOs unless explicitly intended.
-- `#[Lsr\Core\Attributes\MapRequest]` on a controller parameter triggers request DTO mapping.
-- GET requests map query params; other methods map parsed body.
-- Request mapping disables strict type enforcement during denormalization, then runs object validation.
-- Framework defaults should handle validation failures unless a feature explicitly needs custom behavior.
+## DTO Mapping
+
+- Use public typed properties or constructor-promoted readonly properties supported by the installed serializer configuration.
+- Match input keys to property names or define explicit aliases/name conversion.
+- Use backed enums and `DateTimeInterface` types only after verifying installed normalizers.
+- Keep request DTOs separate from projection/domain DTOs unless their interface is intentionally identical.
+- Never silently ignore unknown or invalid external data unless the interface explicitly permits it.
+
+## Object Validation
+
+Common `Lsr\ObjectValidation\Attributes` include:
+
+- `Required`
+- `Email`
+- `StringLength`
+- `IntRange`
+- `Numeric`
+- `Regex`
+- `Url`
+- `Uri`
+- `DateString`
+
+Read attribute constructors before using positional arguments. `Validator::validateAll()` can aggregate failures through the package validation exceptions.
+
+For mapped HTTP DTOs, `RequestValidationMapper`:
+
+1. maps GET query data or non-GET parsed body;
+2. disables strict type enforcement during denormalization;
+3. runs attribute validation;
+4. invokes a `validate()` method when present;
+5. throws one validation exception or a `ValidationMultiException`.
+
+Use `validate()` only for cross-field invariants that attributes cannot express. It must throw the framework validation exception expected by the mapper.
 
 ## DB DTO Fetching
 
-- Serializer mapping can be used in services and read models outside request handling.
-- Use `fetchDto(ClassName::class)` for one DTO and `fetchAllDto(ClassName::class)` for DTO arrays.
-- DTO property names should match selected column aliases.
-- Alias SQL columns to camelCase DTO properties when needed.
-- Add cache tags to DTO queries just as with row queries when data depends on models.
+`Lsr\Db\Dibi\Fluent` exposes typed mapping through:
 
-## Serialization in Latte/API
-
-- `App\Latte\LacExtension` exposes `json`, `xml`, and `csv` filters/functions through Symfony Serializer.
-- Controller `respond()` chooses JSON/XML based on `Accept` headers and defaults to JSON for structured data.
-
-## Validation
-
-```sh
-composer phpstan
-composer cs
+```php
+$query->fetchDto(ArticleRow::class);
+$query->fetchAllDto(ArticleRow::class);
+$query->fetchIteratorDto(ArticleRow::class);
+$query->fetchAssocDto(ArticleRow::class, 'id');
 ```
+
+Alias selected columns to DTO property names. Preserve cache tags and freshness choices exactly as for row fetches.
+
+Do not expose `Dibi\Row` from a stable application module interface when a small typed projection expresses the contract.
+
+## Serialization Safety
+
+- Mark secrets and internal fields with the installed exclusion mechanism; do not depend only on controller filtering.
+- Treat translations, user-authored text, and serialized HTML as untrusted at the rendering interface.
+- Detect circular graphs deliberately; do not hide accidental object-graph expansion behind a permissive circular-reference handler.
+- Keep wire field names stable or version the external interface.
+
+## Verification
+
+Cover mapping and normalization for required/nullable values, unknown values, enums, dates, nested arrays, aliases, exclusions, and validation aggregation. For public JSON/Inertia output, assert the actual serialized shape. Run the application's serializer tests and static analysis.

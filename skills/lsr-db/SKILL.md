@@ -1,77 +1,88 @@
 ---
 name: lsr-db
-description: Use for LSR app database work with the Lsr\Db\DB facade and the dibi/dibi-based fluent query builder, including transactions, DTO fetching, caching, and raw SQL.
+description: Use for LSR database setup and access with Lsr\Db\Connection, the DB facade, dibi fluent queries, typed DTO fetches, caching, named connections, and transactions.
 ---
 
-# DB Facade + Dibi Fluent Workflow
+# LSR Database
 
-## Read First
+## Establish the Local Setup
 
-- DB config: `config/di/services-common.neon` parameter `db`.
-- Facade: `vendor/lsr/db/src/DB.php`.
-- Connection wrapper: `vendor/lsr/db/src/Connection.php`.
-- Fluent wrapper: `vendor/lsr/db/src/Dibi/Fluent.php`.
-- Fetch helpers: `vendor/lsr/db/src/Dibi/FetchFunctions.php`.
-- Migrations: `config/migrations/migrations.neon`.
+- Read `composer.lock` for the installed `lsr/db` version.
+- Find the DI definition for `Lsr\Db\Connection` and the bootstrap call to `Lsr\Db\DB::init()`.
+- Read `vendor/lsr/db/src/{DB,Connection}.php` and `src/Dibi/{Fluent,FetchFunctions}.php` before using an unfamiliar option.
+- Read cache and serializer wiring because the connection requires `Lsr\Caching\Cache` and `Lsr\Serializer\Mapper`.
 
-## Facade Basics
+Creating a `Connection` service is not enough. The static facade must be initialized once after the container is available:
 
-- Use `Lsr\Db\DB` for database access.
-- Common methods include `select`, `insert`, `insertGet`, `insertIgnore`, `update`, `delete`, `query`, `begin`, `commit`, `rollback`, and `transaction`.
-- Dibi placeholders are available in SQL fragments; use placeholders instead of manual interpolation.
-- Use `%n` for identifiers, `%s` for strings, `%i` for integers, and `%SQL` only for vetted SQL fragments.
+```php
+$connection = App::getServiceByType(Lsr\Db\Connection::class);
+assert($connection instanceof Lsr\Db\Connection);
+Lsr\Db\DB::init($connection);
+```
 
-## Fluent Queries
+Keep this in the application bootstrap, not in request handlers. Named connections use `DB::initNamed()` and an explicit connection selection policy.
+
+## Connection Configuration
+
+`Connection` accepts a configuration array. Current options include `driver`, host/port/database credentials, `dsn`, `pdoDriver`, `options`, `prefix`, `lazy`, and `strictSelectForUpdate`. Treat credentials as private runtime configuration.
+
+Use an explicit PDO driver/DSN for non-MySQL databases. Read `Connection::normalizeConfig()` in the installed package rather than guessing DSN behavior.
+
+## Fluent Reads
+
+```php
+$user = DB::select('users', 'id_user, email')
+	->where('[email] = %s', $email)
+	->cacheTags('users')
+	->fetchDto(UserRow::class);
+```
+
+- Use dibi placeholders: `%n` for identifiers, `%s` for strings, `%i` for integers, and `%SQL` only for intentionally composed SQL.
+- `DB::select($table, ...$fields)` treats later arguments as selected fields. Use `[Model::TABLE, 'alias']` for the initial table alias.
+- Use `->join(Model::TABLE, 'alias')` / `->leftJoin(...)` for join aliases; array alias syntax in `join()` is not the same interface.
+- Prefer `fetchDto()` / `fetchAllDto()` for projections crossing a module interface.
+- Available fetch forms also include `fetch`, `fetchSingle`, `fetchIterator`, `fetchAssoc`, `fetchPairs`, `exists`, and DTO variants.
+- Alias SQL columns to DTO property names explicitly.
+
+Fluent fetches cache by default. Use `cache: false` only for reads that require fresh state:
 
 ```php
 $row = DB::select('users', '*')
-    ->where('email = %s', $email)
-    ->fetch();
+	->where('[id_user] = %i', $id)
+	->fetch(cache: false);
 ```
 
-- `DB::select($table, ...$fields)` returns `Lsr\Db\Dibi\Fluent`.
-- For the `DB::select()` FROM table, use `[Model::TABLE, 'alias']` when an alias is needed because later arguments are the SELECT clause. For joins, do not use array alias syntax: use `->join(Model::TABLE, 'alias')` / `->leftJoin(Model::TABLE, 'alias')`. `->join([Model::TABLE, 'alias'])` generates invalid SQL like `table, alias`.
-- Chain `where`, `join`, `leftJoin`, `on`, `groupBy`, `having`, `orderBy`, `limit`, and `offset` as needed.
-- Use `fetch()` for one row, `fetchSingle()` for one scalar, `fetchAll()` for rows, and `fetchIterator()` for large result sets.
-- Use `fetchDto(ClassName::class)` / `fetchAllDto(ClassName::class)` for DTO mapping through the serializer mapper.
+Tag cached projections with every table/entity whose change invalidates the result. Do not depend on a broad operational cache clear.
 
-## Caching
-
-- Fluent fetches cache by default.
-- Pass `cache: false` to fetch helpers for fresh reads:
+## Writes
 
 ```php
-$row = DB::select('users', '*')->where('id_user = %i', $id)->fetch(cache: false);
+DB::insert('users', ['email' => $email]);
+DB::update('users', ['email' => $newEmail], ['id_user = %i', $id]);
+DB::delete('users', ['id_user = %i', $id]);
 ```
 
-- Use `cacheTags(...)` for invalidation grouping and `cacheExpire(...)` for custom expiry.
-- ORM models are tagged automatically through model/cache handling.
-- Specific DB facade queries should add model table tags they depend on, usually `Model::TABLE`, so model updates clear related query cache automatically.
-- Relation queries should also add relation-specific tags when available, for example `Model::TABLE . '/' . $id . '/relations'`.
-- Writes through DB facade do not automatically document feature-level cache intent; clear or tag caches deliberately where required.
+- Prefer ORM lifecycle operations when model validation, relations, hooks, and cache invalidation are part of the change.
+- Use the DB facade for projections, aggregates, bulk operations, atomic SQL expressions, migrations, and lock-sensitive operations.
+- Raw writes do not automatically know application-level cache dependencies. Invalidate the affected tags explicitly.
+- Never interpolate request/user values into SQL strings.
 
-## Writes and Transactions
+## Transactions
 
-- Use array data for inserts/updates:
+`Connection::transaction()` expects a callback returning `bool`: `true` commits, `false` rolls back, and an exception rolls back then rethrows.
 
 ```php
-DB::insert('table_name', ['name' => $name]);
-DB::update('table_name', ['name' => $name], ['id = %i', $id]);
+DB::transaction(static function (Connection $connection): bool {
+	// coordinated writes
+	return true;
+});
 ```
 
-- Wrap multi-step writes in `DB::transaction()` or explicit `begin` / `commit` / `rollback`.
-- The `Connection::transaction()` callback must return `true` to commit and `false` to roll back.
+The method returns `void`; return application results through an outer variable or a deeper application module, not by assuming the callback result is returned. Explicit `begin`, `commit`, and `rollback` support nested savepoints.
 
-## Choosing DB vs ORM
+## Verification
 
-- Use `Lsr\Orm\Model` for aggregate/entity lifecycle code.
-- Use `DB` facade for reporting, projections, aggregate reads, bulk operations, and DTO queries.
-- Keep raw SQL contained and typed at boundaries.
-
-## Validation
-
-```sh
-composer phpstan
-composer cs
-php ./bin/console install
-```
+- Run the smallest query against a disposable/test database and assert the returned DTO/value.
+- For writes, verify commit and rollback paths plus cache visibility.
+- Run the project's DB tests, static analysis, and coding-standard command.
+- When changing connection configuration, exercise the real application entrypoint so bootstrap initialization is covered.

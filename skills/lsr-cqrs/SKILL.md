@@ -1,75 +1,103 @@
 ---
 name: lsr-cqrs
-description: Use for LSR app CQRS work with the lsr/cqrs package, including commands, command handlers, queries, DI discovery, and async command dispatch.
+description: Use for LSR CQRS commands, handlers, query markers, DI registration, synchronous dispatch, and explicitly configured asynchronous command dispatch.
 ---
 
-# CQRS Workflow
+# LSR CQRS
 
-## Read First
+## Read the Installed Contract
 
-- CQRS config: `config/di/extensions/cqrs.neon`.
-- App CQRS namespace: `src/CQRS`.
-- Async bus: `src/CQRS/AsyncCommandBus.php`.
-- Async task bridge: `src/Tasks/HandleCommandTask.php`, `src/Tasks/Payloads/HandleCommandPayload.php`.
-- Package APIs: `vendor/lsr/cqrs/src/CommandInterface.php`, `CommandHandlerInterface.php`, `CommandBus.php`, `QueryInterface.php`.
-- Keep CQRS files grouped by technical layer: `Commands`, `CommandHandlers`, `CommandResponses`, and `Queries`.
+Read:
+
+- `vendor/lsr/cqrs/src/CommandInterface.php`
+- `CommandHandlerInterface.php`
+- `CommandBus.php`
+- `AsyncCommandBusInterface.php`
+- `QueryInterface.php`
+- `DI/CqrsExtension.php`
+- the application's CQRS NEON files and handler discovery rules
+
+Do not infer an application folder layout or async transport from the package. `lsr/cqrs` supplies contracts and a command bus; applications own organization, handler registration, query execution, and async adapters.
+
+## DI Setup
+
+```neon
+extensions:
+	cqrs: Lsr\CQRS\DI\CqrsExtension
+
+cqrs:
+	asyncBus: null
+```
+
+Every command handler must be a DI service. The package does not scan an application handler directory. Use the application's existing Nette search convention or explicit definitions.
+
+Configure `asyncBus` with a service implementing `Lsr\CQRS\AsyncCommandBusInterface` only when an async transport exists:
+
+```neon
+cqrs:
+	asyncBus: @application.asyncCommandBus
+```
+
+Without it, `CommandBus::dispatchAsync()` throws `RuntimeException`.
 
 ## Commands
-
-- Put command DTOs under `src/CQRS/Commands`.
-- Commands implement `Lsr\CQRS\CommandInterface`.
-- `getHandler()` must return either the handler class name or a DI service name.
-- Keep commands as immutable intent/data objects where possible.
-- Put command result DTOs under `src/CQRS/CommandResponses` when a command returns structured success/failure data.
-- If a command returns a value, document it with the generic PHPDoc form used by `lsr/cqrs`: `@implements CommandInterface<ResultType>`.
-
-Example shape:
 
 ```php
 use Lsr\CQRS\CommandInterface;
 
-/** @implements CommandInterface<void> */
-readonly class DoSomethingCommand implements CommandInterface
+/** @implements CommandInterface<Result> */
+final readonly class RenameArticle implements CommandInterface
 {
-    public function __construct(public int $id) {}
+	public function __construct(
+		public int $articleId,
+		public string $title,
+	) {}
 
-    public function getHandler(): string
-    {
-        return DoSomethingHandler::class;
-    }
+	public function getHandler(): string
+	{
+		return RenameArticleHandler::class;
+	}
 }
 ```
 
-## Command Handlers
+- Commands are intent/data objects; keep them serializable if async dispatch is possible.
+- `getHandler()` returns a non-empty handler class or DI service name.
+- Class handlers are resolved by DI type; named handlers are resolved by service name.
+- Use the generic `CommandInterface<TResult>` PHPDoc so dispatch results remain analyzable.
+- Do not put open resources, closures, DB connections, or service instances in async commands.
 
-- Put handlers under `src/CQRS/CommandHandlers`.
-- Handlers implement `Lsr\CQRS\CommandHandlerInterface`.
-- The DI search extension auto-registers handlers from `src/CQRS/CommandHandlers` when they implement the interface.
-- In `handle(CommandInterface $command): mixed`, assert or guard the concrete command type before using it.
-- Inject dependencies through the constructor; avoid service locator calls in handlers unless the package API requires it.
+## Handlers
+
+- Implement `CommandHandlerInterface` and register the handler in DI.
+- Guard/assert the concrete command type at the start of `handle()`.
+- Inject dependencies through the constructor.
+- Own transaction scope around one atomic command.
+- Return the command's declared result type.
+- Keep transport acknowledgement/retry behavior in the async adapter/task layer, not in a reusable handler.
 
 ## Dispatch
 
-- Inject `Lsr\CQRS\CommandBus` where synchronous or async dispatch is needed.
-- Use `$commandBus->dispatch($command)` for in-process handling.
-- Use `$commandBus->dispatchAsync($command)` when the work should be pushed to RoadRunner jobs through `App\CQRS\AsyncCommandBus`.
-- Async commands must be serializable by the configured RoadRunner task serializer.
+```php
+$result = $commandBus->dispatch($command);
+$commandBus->dispatchAsync($command);
+```
+
+Synchronous dispatch resolves a handler and returns `handle()`'s result. Async dispatch delegates to the configured adapter and returns `void`; enqueue success does not prove processing success.
 
 ## Queries
 
-- Put query objects/services under `src/CQRS/Queries`.
-- The current config auto-registers classes from `src/CQRS/Queries` that implement `Lsr\CQRS\QueryInterface`.
-- Queries are simple query services. Do not introduce a query bus unless explicitly requested.
-- Implement `Lsr\CQRS\QueryInterface` on concrete query services.
-- Build the fluent DB/model query in the constructor or named filter methods.
-- Use chainable filter/paging/sorting methods that return `self`/`static`.
-- Expose execution through explicit terminal methods such as `get()`, `first()`, or `count()`.
-- Keep read models side-effect free.
-- Include a `noCache()` or equivalent switch when a query normally uses cached DB fetches but callers may need fresh reads.
+`Lsr\CQRS\QueryInterface` is currently a marker. The package does not provide a query bus or prescribe fluent query methods.
 
-## Validation
+- Follow the application's established query style.
+- Keep query modules side-effect free.
+- Return typed DTOs/models/scalars rather than leaking `Dibi\Row` across a public module interface.
+- Use DB/ORM cache tags or `cache: false` according to freshness requirements.
+- Do not invent a query bus unless the application has a real dispatch seam that earns it.
 
-```sh
-composer phpstan
-composer cs
-```
+## Verification
+
+- Unit-test handler behavior through its command interface.
+- Integration-test handler resolution through the real compiled container.
+- Test missing/invalid handler failures when changing registration.
+- For async adapters, run the actual worker and assert the command's state transition, failure, and retry/ack behavior.
+- Run the application's static analysis and CQRS tests.

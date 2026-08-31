@@ -1,62 +1,117 @@
 ---
 name: lsr-app-di
-description: Use for LSR application bootstrap, Nette DI services, config files, constants, service discovery, injected controller properties, and container/cache cleanup.
+description: Use for LSR application bootstrap, Nette DI extensions, modular NEON configuration, service registration, container lookup, and generated-container cleanup.
 ---
 
-# LSR App + DI Workflow
+# LSR Application and DI
 
-## Read First
+## Establish the Installed Version
 
-- Config entrypoint: `config/services.php`.
-- Shared DI config: `config/di/services-common.neon`.
-- Production/debug DI: `config/di/services.neon`, `config/di/servicesDebug.neon`.
-- Local overrides: `config/di/services.local.neon`, `config/di/services.local.neon.dist`, `private/config.neon`.
-- Constants: `config/di/constants.php`, `include/constants.php`.
-- Bootstrap/load: `include/load.php`, `include/config.php`, `src/Core/Loader.php`.
-- LSR app API: `vendor/lsr/core/src/App.php`.
+1. Read the application's `composer.json` and `composer.lock`.
+2. Read `config/services.php`; `Lsr\Core\App::setupDi()` loads the config files returned by this file.
+3. Read every root NEON file returned by `config/services.php` and follow its `includes:` recursively.
+4. Inspect the installed extension classes under `vendor/lsr/*/src/{DI,Di}` before adding configuration keys. LSR packages are independently versioned and their schemas can differ.
+5. Read the application's bootstrap entrypoints before changing startup order.
 
-## DI Structure
+Do not copy paths, service names, or parameters from another LSR application without checking the local container configuration.
 
-- Keep framework extension includes under `config/di/extensions/*.neon`.
-- Keep grouped app config under `config/di/configs/*.neon` when it belongs to a specific subsystem.
-- Use `services-common.neon` for shared wiring that applies to production and debug.
-- For domain-level separation in larger apps, create a domain-specific NEON file and include it from `services-common.neon`.
-- Use `services.neon` and `servicesDebug.neon` only for environment-specific setup.
-- Use `services.local.neon` or `private/config.neon` for machine/private overrides.
-- Do not hard-code environment-specific secrets into committed config.
+## Keep DI Configuration Modular
+
+Do not grow one application-wide NEON file. Keep root files as indexes and split stable concerns into focused files:
+
+```neon
+# config/services-common.neon
+includes:
+	- di/database.neon
+	- di/http.neon
+	- di/console.neon
+	- di/jobs.neon
+	- di/features/tournaments.neon
+```
+
+Nette resolves relative `includes:` paths from the including NEON file and detects recursive includes. Prefer:
+
+- one shared root included by environment roots;
+- one file per technical concern or domain with coherent services and parameters;
+- environment files containing only environment differences;
+- uncommitted/private files for credentials and machine overrides.
+
+Example environment roots:
+
+```neon
+# config/services.neon
+includes:
+	- services-common.neon
+	- di/production.neon
+```
+
+```neon
+# config/servicesDebug.neon
+includes:
+	- services-common.neon
+	- di/debug.neon
+```
+
+Register a directory once; do not repeat individual services in a central file when Nette's search extension already owns that convention.
+
+## Package Extensions
+
+Register only installed packages. Current extension classes include:
+
+```neon
+extensions:
+	cache: Lsr\Caching\DI\CacheExtension
+	console: Lsr\Console\Di\ConsoleExtension
+	cqrs: Lsr\CQRS\DI\CqrsExtension
+	inertia: Lsr\Inertia\DI\InertiaExtension
+	lsr: Lsr\Core\DI\LsrExtension
+	orm: Lsr\Orm\DI\OrmExtension
+	request: Lsr\Core\Requests\DI\RequestExtension
+	roadrunner: Lsr\Roadrunner\DI\RoadrunnerExtension
+	routing: Lsr\Core\Routing\DI\RoutingExtension
+	scheduler: Lsr\Scheduler\Di\SchedulerExtension
+	serializer: Lsr\Serializer\DI\SerializerExtensions
+```
+
+Some packages ship a `vendor/lsr/<package>/services.neon`; others expose only an extension. Include package config when it matches the installed package, otherwise register the extension and services explicitly. Define each extension name once across the complete include graph.
+
+The core `lsr` extension requires valid `appDir` and `tempDir` values. Read `Lsr\Core\DI\LsrExtension::getConfigSchema()` for the installed options.
 
 ## Service Registration
 
-- Prefer constructor injection for ordinary services, commands, CQRS handlers, jobs, and controllers.
-- Auto-discover broad technical-layer services when there is a stable directory/interface pattern, especially controllers, CLI commands, CQRS command handlers, and CQRS query services.
-- Explicitly define specific services in NEON when they need a stable service name, custom factory/setup, scalar constructor args, or domain-specific wiring.
-- Controllers extend `Lsr\Core\Controllers\Controller` and are auto-discovered from `src/Http/Controllers`.
-- Controller properties using Nette `#[Inject]` require the controller decorator/inject setup in `services-common.neon`.
-- Use explicit service names when other code references a name, for example RoadRunner task DI names.
+- Prefer constructor injection and autowiring for application modules.
+- Register commands, CQRS handlers, middleware, task dispatchers, and scheduler jobs as DI services.
+- Use explicit service names when framework configuration or a runtime payload resolves by name. RoadRunner task names are one example.
+- Use scalar constructor arguments from typed parameters, not hidden global reads.
+- Use Nette `#[Inject]` property injection only where the application intentionally enables `InjectExtension`; constructor injection remains the default.
+- Keep service discovery rules near the concern they discover, not in an unrelated central config.
 
-## Service Lookup
+## Container Access
 
-- Prefer constructor injection when adding new code.
-- Existing bootstrap/config files may use `App::getService(...)`, `App::getServiceByType(...)`, or `App::getContainer()`.
-- When looking up a service by name, assert or type-check the result before use.
-- Avoid service locator calls inside domain/application services unless the LSR package API expects them.
+Prefer injected dependencies. At bootstrap or framework integration seams, these installed core methods are available:
 
-## Cache and Container Cleanup
+- `App::getContainer()`
+- `App::getService($name)`
+- `App::getServiceByType($type)`
+- `App::findServicesByType($type)`
 
-- DI/container changes may require clearing generated container files.
-- Console commands supplied by `lsr/console` include:
+Treat service-locator use inside application/domain modules as a design smell. When lookup by name or type is unavoidable, assert the returned interface before use.
 
-```sh
-php ./bin/console container:clean
-php ./bin/console cache:clean
-```
+## Generated Container and Cache
 
-- `cache:clean` also has alias `cache:clear` and supports repeated `--tag` / `-t` options, but it is an operational/troubleshooting command. Automated tests should not rely on manually cleaning cache.
-
-## Validation
+After DI changes, use the commands actually registered by the installed packages:
 
 ```sh
-composer phpstan
-composer cs
-php ./bin/console
+php bin/console container:debug
+php bin/console container:clean
+php bin/console config:cache:clean
+php bin/console latte:cache:clean
 ```
+
+`lsr/cache` separately provides `cache:clean`; `lsr/orm` provides `orm:cache:clean`. Do not use broad cache clearing as a substitute for correct configuration or invalidation.
+
+## Verification
+
+1. Run the application's narrow static-analysis and coding-standard commands from `composer.json`.
+2. Run `php bin/console container:debug` or list commands to force container compilation.
+3. Exercise the relevant HTTP, console, worker, or scheduler entrypoint. Container compilation alone does not prove runtime initialization order.

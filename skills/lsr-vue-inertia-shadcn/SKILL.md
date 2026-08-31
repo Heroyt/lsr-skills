@@ -1,68 +1,87 @@
 ---
 name: lsr-vue-inertia-shadcn
-description: Use for LSR app frontend work with Vue 3, TypeScript, Inertia pages/forms, Tailwind CSS, and shadcn-vue/Reka UI components.
+description: Use for Vue 3 and TypeScript frontends served by lsr/inertia, including page resolution, typed props/forms, layouts, shared locale/auth state, Tailwind, and optional shadcn-vue components.
 ---
 
-# Vue + Inertia + shadcn Workflow
+# LSR Vue, Inertia, and Optional shadcn-vue
 
-## Read First
+This is an optional application stack, not a requirement of LSR core. Use `lsr-inertia-backend` for server response semantics and `lsr-localization` for gettext/locale integration.
 
-- Frontend entrypoint: `assets/js/app.ts`.
-- Inertia pages: `assets/js/pages`.
-- Layouts: `assets/js/layouts`.
-- shadcn-vue components: `assets/js/components/ui`.
-- Class helper: `assets/js/lib/utils.ts`.
-- Vite aliases and entries: `vite.config.ts`.
-- shadcn-vue config: `components.json`.
-- Backend page names: controller calls to `$this->inertia(...)` under `src/Http/Controllers`.
+## Read the Application First
 
-## Patterns
+- `package.json` and the lock file;
+- frontend entrypoint and `createInertiaApp()` setup;
+- page resolver and page directories;
+- TypeScript/Vite aliases;
+- shared layouts and prop types;
+- `components.json` only if shadcn-vue is installed;
+- backend `$this->inertia('...')` component names.
 
-- Use Vue SFCs with `<script setup lang="ts">`.
-- Import app code through `@/`, which resolves to `assets/js`.
-- Use Inertia page names that match `assets/js/pages/**/*.vue`, for example backend `inertia('Auth/Login')` maps to `assets/js/pages/Auth/Login.vue`.
-- Use `defineOptions({ layout: AppLayout })` when a page needs the shared layout.
-- Use `useForm()` from `@inertiajs/vue3` for forms that submit to LSR routes.
-- Import shadcn components from their folder index, for example `import { Button } from '@/components/ui/button';`.
-- Use `cn()` for class merging when creating reusable UI components.
-- Prefer existing shadcn/Reka primitives over hand-rolled controls when a component exists locally.
-- Follow `components.json`: shadcn-vue `new-york` style, TypeScript, Tailwind CSS variables, slate base color, Lucide icons, and aliases `@/components`, `@/components/ui`, `@/lib`, `@/lib/utils`.
+Do not impose one app's paths, shadcn style, Tailwind base color, icons, or package manager on another app.
 
-## Adding Components
+## Vue Baseline
 
-- Existing local UI components include `button`, `label`, and `form`.
-- If adding a shadcn-vue component, place it under `assets/js/components/ui/<component>` and export it from `index.ts` following the existing component folders.
-- `shadcn-vue` is a local dev dependency. Use the local CLI through pnpm instead of `dlx`/global installs:
+Use Vue 3 Composition API with `<script setup lang="ts">` unless the project explicitly uses another established style.
 
-```sh
-pnpm exec shadcn-vue add <component>
+- Keep route pages as composition surfaces.
+- Split substantial forms, lists, filters, and repeated sections into focused components.
+- Keep source state minimal; derive with `computed` and use watchers only for side effects.
+- Type props and emits.
+- Use props down/events up; add shared state only when it crosses real feature interfaces.
+- Extract a composable for reused or side-effect-heavy reactive behavior, not for every helper.
+- Keep external/large opaque objects out of deep reactivity where possible.
+
+## Inertia Pages and Props
+
+Backend component names must match the page resolver exactly, including case. Keep one typed page-prop interface per stable page/shared contract.
+
+```vue
+<script setup lang="ts">
+interface Props {
+  articles: ArticleSummary[]
+}
+
+defineProps<Props>()
+</script>
 ```
 
-- Use the local CLI for component manipulation when possible, then adapt only enough to match local formatting and imports.
-- Keep component variants in TypeScript where the local shadcn component pattern already uses `class-variance-authority`.
-- Use `@lucide/vue` icons for buttons and compact controls when an icon is appropriate.
+- Treat backend props as server snapshots, not a second client database.
+- Do not mutate page props directly; copy only state that is genuinely editable.
+- Preserve partial/deferred/merge/once semantics supplied by `lsr/inertia`.
+- Keep layouts responsible for shared chrome, not feature logic.
+- Synchronize auth/locale/shared state on every Inertia navigation when the backend owns it.
 
 ## Forms
 
-- Pair frontend form field names with backend request DTO property names.
-- For POST/PUT/DELETE form submissions, use `form.post(...)`, `form.put(...)`, or `form.delete(...)`.
-- Surface validation errors from Inertia form state near the corresponding field.
-- Do not rely only on HTML validation; backend DTOs under `src/Http/Requests` remain the source of truth.
+Use the installed `@inertiajs/vue3` form interface:
 
-## Validation
+- field names match backend request DTO properties;
+- use method-specific `post`, `put`, `patch`, or `delete` calls;
+- render server validation errors adjacent to fields;
+- handle processing/disabled state and preserve accessibility;
+- do not rely on browser validation as the only validation;
+- generate/receive URLs through the application's route contract rather than duplicating route paths.
 
-Run the relevant checks after frontend changes:
+## shadcn-vue
 
-```sh
-pnpm lint:fix
-pnpm format
-pnpm run tsc
-pnpm run eslint
-pnpm run build
-```
+Use shadcn-vue only when `components.json` and dependencies prove the project adopted it.
 
-For visual changes, start the dev server and verify the page in the browser:
+- Reuse installed local primitives before generating another implementation.
+- Follow aliases, style, icon library, and Tailwind configuration from `components.json`.
+- Run the project's local CLI through its package manager; do not use a global tool or silently upgrade dependencies.
+- Generated components become application code: review accessibility, imports, variants, and local formatting.
+- Keep feature behavior outside generic UI primitives.
 
-```sh
-pnpm run dev
-```
+If shadcn-vue is absent, follow the application's component system. Do not add it merely because this skill was selected.
+
+## Localization
+
+For localized apps, Vue's active locale comes from backend-owned Inertia props. `vue3-gettext` is the preferred optional compatibility layer with LSR's native gettext catalogs. Do not implement a client-only language switch that leaves PHP, routes, `<html lang>`, and browser formatting out of sync.
+
+Use BCP 47 tags (`cs-CZ`) for `Intl` and gettext locale IDs (`cs_CZ`) for catalogs. Centralize their mapping.
+
+## Verification
+
+Run the scripts actually defined by `package.json`, normally formatting/lint, `vue-tsc` or TypeScript checking, tests for changed contracts, and a production build.
+
+For UI changes, start the real app, navigate through the changed Inertia flow, submit success/failure forms, verify partial/deferred behavior if touched, and inspect the page in a browser at relevant viewport sizes.

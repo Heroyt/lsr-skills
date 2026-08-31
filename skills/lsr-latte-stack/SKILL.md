@@ -1,77 +1,84 @@
 ---
 name: lsr-latte-stack
-description: Use for LSR app Latte templating with LSR Latte services, templates, layouts, custom tags/filters/functions, assets, CSRF/link/lang helpers, sandbox rendering, and optional Inertia shell integration.
+description: Use for LSR server-rendered Latte templates, typed template parameters, core tags/functions, translation integration, sandbox rendering, custom extensions, assets, and optional Inertia shells.
 ---
 
-# LSR Latte Stack Workflow
+# LSR Latte Stack
 
-## Read First
+Use `lsr-localization` for gettext catalogs, locales, plurals/contexts, and PHP/Vue translation parity. Use `lsr-inertia-backend` when Latte only hosts the initial Inertia page shell.
 
-- Latte config: `config/di/extensions/latte.neon`.
-- Templates: `templates`.
-- Main layout: `templates/@layout.latte`.
-- Inertia shell template: `templates/pages/index.latte`.
-- LSR Latte wrapper: `vendor/lsr/core/src/Templating/Latte.php`.
-- LSR Latte extension: `vendor/lsr/core/src/Templating/LatteExtension.php`.
-- App Latte extension: `src/Latte/LacExtension.php`.
-- Latte nodes: `vendor/lsr/core/src/Templating/Nodes`.
-- Assets config: `config/di/extensions/assets.neon`.
+## Read the Installed Stack
+
+- `vendor/lsr/core/src/Templating/Latte.php`
+- `LatteExtension.php` and `TranslatorExtension.php`
+- the application's Latte/asset DI files
+- layouts and the target template
+- application-owned Latte extensions
+
+Do not assume template directories, asset plugins, or custom filters from another LSR application.
 
 ## Rendering
 
-- Controllers can render Latte through `Controller::view($template)`.
-- `Lsr\Core\Templating\Latte::view()` and `viewToString()` resolve templates from `TEMPLATE_DIR` and append `.latte`.
-- Template names should omit the `.latte` suffix, for example `pages/index`.
-- Missing templates throw `TemplateDoesNotExistException`.
-- `Controller::init()` provides common params such as `page`, `app`, `request`, `errors`, `notices`, and `flashMessages`.
+`Lsr\Core\Templating\Latte` currently exposes `view()` and `viewToString()` for filesystem templates. `Lsr\Core\Controllers\Controller::view()` returns a response using the configured renderer.
 
-## Template Parameters
+- Pass template names in the format expected by the installed `Latte::getTemplate()` implementation.
+- Prefer `TemplateParametersInterface` / `TemplateParameters` DTOs for stable page interfaces.
+- Small private partials may use local arrays when their shape stays local.
+- Escape at the rendering interface; do not pre-mark database, request, or translated text as safe HTML.
 
-- Prefer `Lsr\Core\Controllers\TemplateParameters` subclasses for template/page parameters. They are the default choice for type safety.
-- Plain arrays are fine for small server-rendered templates.
-- Keep controller-only/framework objects out of frontend-facing serialized props.
+## Core Extension Surface
 
-## Tags, Filters, and Functions
+Current LSR core registers Latte tags including:
 
-LSR core extension provides tags/functions such as:
+```text
+alert, alertDanger, alertInfo, alertSuccess, alertWarning
+csrf, csrfInput
+getUrl, lang, link
+logo, svgIcon, tracyDump
+```
 
-- `{link ...}` / `link(...)` for route links.
-- `{getUrl ...}` / `getUrl(...)` for base URLs.
-- `{lang ...}` and `|lang` for translations.
-- `{csrf ...}` and `{csrfInput ...}` for CSRF tokens.
-- `{svgIcon ...}`, `{logo ...}`, and alert tags.
-- `{tracyDump ...}` for debug dumps.
+Functions include `csrf`, `getUrl`, `lang`, `link`, `logo`, and `svgIcon`; the translator extension also provides translation tags/filter behavior.
 
-App extension `App\Latte\LacExtension` is treated as a stable extension point and provides:
+Check installed source before using these names. Application extensions should add only project-specific behavior and must be registered as Latte extension services in DI.
 
-- filters/functions: `json`, `xml`, `csv`.
-- `escapeJs` filter for values embedded in scripts.
+Keep custom extensions small:
 
-## Assets
+- pure formatting belongs in filters/functions;
+- structure-producing syntax belongs in a tag/node only when a function/partial is insufficient;
+- never expose unsafe eval, filesystem, container, or arbitrary-call capabilities to templates.
 
-- Nette assets extension is configured in `config/di/extensions/assets.neon`.
-- `templates/@layout.latte` uses `n:asset` for favicon/manifest assets.
-- Use `{asset 'assets/css/tailwind.css'}`, `{asset 'assets/css/app.scss'}`, and `<script n:asset="assets/js/app.ts" type="module"></script>` style patterns for Vite/Nette asset integration.
+## Layouts and Assets
+
+Follow the application's established layout inheritance and asset integration. LSR core does not require a particular Vite/Nette-assets configuration.
+
+- Put shared document structure in layouts.
+- Put reusable presentation in components/partials.
+- Keep controllers responsible for response/page orchestration, not HTML fragments.
+- Resolve asset URLs through the installed asset integration; do not hard-code build hashes or deployment roots.
 
 ## Sandbox
 
-- `Lsr\Core\Templating\Latte` configures Latte sandbox policy.
-- Sandbox rendering methods include `sandbox`, `sandboxToString`, `sandboxFromString`, and `sandboxFromStringToString`.
-- Allowed sandbox tags include `svgIcon`, `link`, `getUrl`, and `lang`; functions include `sprintf` and `lang`.
-- Use sandbox rendering only when rendering user/admin-editable template strings or other untrusted template content.
+Current `Latte` configures a safe policy and exposes:
 
-## Inertia Notes
+- `sandbox()`
+- `sandboxToString()`
+- `sandboxFromString()`
+- `sandboxFromStringToString()`
 
-- This skill is not dependent on Inertia.
-- Inertia initial page rendering uses Latte only as a shell template, usually `templates/pages/index.latte`.
-- Inertia-specific props, partial reloads, and headers belong in the `lsr-inertia-backend` skill.
+The installed policy currently allows all filters, only selected functions (`sprintf`, `lang`), and selected LSR tags (`svgIcon`, `link`, `getUrl`, `lang`). Re-read the installed policy before relying on it.
 
-## Validation
+Use sandbox methods only for intentionally user/admin-authored templates. A sandbox is not permission to pass secrets or powerful objects into template parameters. Test that forbidden constructs fail.
 
-```sh
-composer cbf
-composer phpstan
-composer cs
-composer test
-pnpm run build
-```
+## Inertia Shells
+
+For an initial non-Inertia request, `lsr/inertia` renders a Latte shell containing the serialized page payload. Keep the shell limited to document metadata, root mount element, serialized Inertia page, and assets. Page props and partial reload semantics belong to `lsr-inertia-backend`.
+
+Ensure `<html lang>` and server locale come from the same backend-owned locale contract used by the Inertia page.
+
+## Verification
+
+- Render through the actual controller/runtime, not only `Latte::renderToString()`.
+- Check escaping, layout composition, missing template behavior, CSRF fields, links, assets, and locale.
+- For sandbox changes, test allowed and rejected syntax.
+- For visual changes, verify the rendered page in a browser.
+- Run application static analysis, template checks, tests, and frontend build when the shell/assets changed.
