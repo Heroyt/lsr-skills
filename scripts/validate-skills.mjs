@@ -98,22 +98,64 @@ for (const name of catalogNames) {
   }
 }
 
-for (const markdownPath of markdownFiles) {
-  const content = await readFile(markdownPath, 'utf8')
-  const relativePath = markdownPath.slice(root.length + 1)
-  const fenceCount = content.split(/\r?\n/).filter((line) => line.startsWith('```')).length
-  if (fenceCount % 2 !== 0) {
+const contentOutsideFences = (content, relativePath) => {
+  const proseLines = []
+  let fenceCharacter = null
+  let fenceLength = 0
+
+  for (const line of content.split(/\r?\n/)) {
+    const fenceMatch = line.match(/^\s*(`{3,}|~{3,})/)
+    if (fenceMatch) {
+      const marker = fenceMatch[1]
+      if (fenceCharacter === null) {
+        fenceCharacter = marker[0]
+        fenceLength = marker.length
+        continue
+      }
+      if (marker[0] === fenceCharacter && marker.length >= fenceLength) {
+        fenceCharacter = null
+        fenceLength = 0
+        continue
+      }
+    }
+    if (fenceCharacter === null) {
+      proseLines.push(line)
+    }
+  }
+
+  if (fenceCharacter !== null) {
     errors.push(`${relativePath}: unbalanced fenced code blocks`)
   }
 
-  for (const match of content.matchAll(/\]\(([^)]+)\)/g)) {
-    const target = match[1].split('#', 1)[0]
-    if (!target || /^(?:https?:|mailto:)/.test(target)) {
+  return proseLines.join('\n')
+}
+
+const markdownLinkPattern =
+  /\]\(\s*(?:<([^>\n]+)>|([^\s)]+))(?:\s+(?:"[^"\n]*"|'[^'\n]*'|\([^)\n]*\)))?\s*\)/g
+
+for (const markdownPath of markdownFiles) {
+  const content = await readFile(markdownPath, 'utf8')
+  const relativePath = markdownPath.slice(root.length + 1)
+  const prose = contentOutsideFences(content, relativePath)
+
+  for (const match of prose.matchAll(markdownLinkPattern)) {
+    const rawTarget = match[1] ?? match[2]
+    const target = rawTarget.split(/[?#]/, 1)[0]
+    if (!target || target.startsWith('/') || /^[a-z][a-z0-9+.-]*:/i.test(target)) {
       continue
     }
-    const resolvedTarget = resolve(dirname(markdownPath), decodeURIComponent(target))
+
+    let decodedTarget
+    try {
+      decodedTarget = decodeURIComponent(target)
+    } catch {
+      errors.push(`${relativePath}: invalid encoded link ${rawTarget}`)
+      continue
+    }
+
+    const resolvedTarget = resolve(dirname(markdownPath), decodedTarget)
     if (!(await exists(resolvedTarget))) {
-      errors.push(`${relativePath}: broken local link ${match[1]}`)
+      errors.push(`${relativePath}: broken local link ${rawTarget}`)
     }
   }
 }
