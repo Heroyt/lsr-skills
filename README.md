@@ -86,7 +86,7 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 | --- | --- |
 | [`lsr-cqrs`](skills/lsr-cqrs/SKILL.md) | Commands, handlers, query markers, DI resolution, synchronous dispatch, and async adapters. |
 | [`lsr-console`](skills/lsr-console/SKILL.md) | Symfony Console DI discovery, `AsCommand`, lazy commands, maintenance commands, and CLI behavior. |
-| [`lsr-scheduler`](skills/lsr-scheduler/SKILL.md) | `SchedulerJobInterface`, cron/periodic triggers, scheduled commands, shared state/locks, and supervision. |
+| [`lsr-scheduler`](skills/lsr-scheduler/SKILL.md) | `SchedulerJobInterface`, cron/periodic triggers, scheduled commands, diagnostics, shared state/locks, and supervision. |
 | [`lsr-async-jobs`](skills/lsr-async-jobs/SKILL.md) | RoadRunner task payloads/dispatchers, `TaskProducer`, serializers, acknowledgement, retries, and async CQRS. |
 | [`lsr-roadrunner-runtime`](skills/lsr-roadrunner-runtime/SKILL.md) | DI + `.rr.yaml`, HTTP/jobs workers, RPC/queues, process supervision, and long-running isolation. |
 | [`lsr-logging`](skills/lsr-logging/SKILL.md) | PSR-3/LSR logging, DI, structured context, redaction, storage/formatting, worker lifetime, and operations. |

@@ -1,6 +1,6 @@
 ---
 name: lsr-scheduler
-description: Use for lsr/scheduler DI setup, SchedulerJobInterface services, cron/periodic triggers, scheduled console commands, state and locking, RoadRunner supervision, idempotency, and scheduler verification.
+description: Use for lsr/scheduler DI setup, SchedulerJobInterface services, cron/periodic triggers, scheduled console commands, scheduler diagnostics, state and locking, RoadRunner supervision, idempotency, and verification.
 ---
 
 # LSR Scheduler
@@ -105,6 +105,21 @@ scheduler:
 
 Locking reduces concurrent execution; it does not remove the need for idempotency or DB-level invariants.
 
+## Diagnostics
+
+The DI extension registers Symfony Scheduler's diagnostic command alongside `scheduler:run`:
+
+```sh
+php bin/console debug:scheduler
+```
+
+Use it to inspect the `default` schedule's configured jobs and attributed commands, triggers, provider names, and next-run times. Provider names for NEON jobs match their keys under `scheduler.jobs`.
+
+- Pass `--date='2026-01-01 00:00:00 UTC'` for deterministic next-run calculations.
+- Pass `--all` to include recurring messages whose triggers have terminated.
+- An empty or missing job indicates a DI configuration/discovery issue; inspect the compiled container before debugging the long-running process.
+- The standalone LSR integration exposes one schedule named `default`; do not infer support for Symfony's multi-schedule DI conventions.
+
 ## Process Supervision
 
 Run one supervised scheduler process per intended scheduling cluster:
@@ -117,7 +132,7 @@ When RoadRunner supervises it, configure it as a service with one process and re
 
 ## Verification
 
-- Force container compilation and confirm `scheduler:run` is registered.
+- Force container compilation and confirm both `scheduler:run` and `debug:scheduler` are registered.
 - Use a test clock or deliberately short disposable interval for deterministic verification.
 - Assert job invocation, context, timezone, missed-run policy, and failure visibility.
 - Test lock contention with the actual shared lock backend when running replicas.
