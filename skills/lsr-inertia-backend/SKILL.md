@@ -21,7 +21,7 @@ The adapter evolves independently. Read installed method signatures and page met
 
 ## DI and Middleware
 
-Register the installed `Lsr\Inertia\DI\InertiaExtension`, then resolve `Lsr\Inertia\Middleware\InertiaMiddleware` through DI and attach it to Inertia routes.
+Register the installed `Lsr\Inertia\DI\InertiaExtension`, then register `Lsr\Inertia\Middleware\InertiaMiddleware` in a named routing middleware group through `$this->serviceRef(InertiaMiddleware::class)`. Attach the group with `middleware()` or `middlewareAll()` to every Inertia route. See `lsr-routing` for service-reference and compiled-route-cache rules.
 
 The middleware:
 

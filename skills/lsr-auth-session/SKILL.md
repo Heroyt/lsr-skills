@@ -48,7 +48,7 @@ Package middleware:
 - `Lsr\Core\Auth\Middleware\LoggedIn`
 - `Lsr\Core\Auth\Middleware\LoggedOut`
 
-Resolve middleware through DI when it has dependencies. Attach it through the application's route/group convention.
+Resolve package middleware through DI with the routing package's explicit service references. Put shared stacks in a named middleware group, then attach that group through `middleware()` or `middlewareAll()`; use a direct service reference for a one-off route. See `lsr-routing` for group ordering, identity deduplication, and compiled-cache rules.
 
 Authentication proves identity, not permission. Use `hasRight()` or an application authorization module for protected actions, and enforce it server-side even when Vue/Latte hides controls.
 

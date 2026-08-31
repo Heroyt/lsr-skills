@@ -25,6 +25,11 @@ routing:
 		- %constants.appDir%routes
 	controllers:
 		- %constants.appDir%src/Http/Controllers
+	cache:
+		file: %tempDir%/routes.php
+		autoCompile: true
+		checkTimestamps: false
+		commands: true
 ```
 
 Each `routeFiles` value may be a file or directory. For a directory, current `Router` loads every direct `*.php` file with `glob()`; it does not recurse into subdirectories. Controller directories are scanned recursively for route attributes.
@@ -64,7 +69,27 @@ $articles->get('/{articleId}', [ArticleController::class, 'show'])->name('articl
 - `name()` and `localize()` operate on the last route and fail when no active route exists.
 - `param()` applies to the active route or all routes when no route is active; `paramAll()` is explicit group-wide validation.
 
-Resolve dependency-bearing middleware through DI. Preserve order; middleware is an ordered interface, not a set.
+Define reusable middleware stacks in a route file loaded before their consumers. `middleware()` and `middlewareAll()` accept middleware instances, middleware-group names, and explicit service references:
+
+```php
+use App\Http\Middleware\CsrfMiddleware;
+use App\Http\Middleware\SessionMiddleware;
+
+$this->middlewareGroup(
+	'web',
+	$this->serviceRef(SessionMiddleware::class),
+	$this->serviceRef(CsrfMiddleware::class),
+);
+
+$admin = $this->group('/admin')->middlewareAll('web');
+$admin->get('', [AdminController::class, 'index']);
+```
+
+Bare strings are case-insensitive middleware-group names, not DI identifiers. Use `$this->serviceRef(SomeMiddleware::class)` to resolve exactly one service by type. Use `\Lsr\Core\Routing\ServiceReference::named('service.name')` only when an exact Nette service name is required. Direct middleware instances remain appropriate for dependency-free one-off middleware.
+
+Group definitions append when registered repeatedly. Resolution preserves call order and removes only repeated references to the same middleware object; distinct instances of the same class remain distinct. Middleware groups cannot contain other group names. All referenced groups must exist before route loading finishes.
+
+Resolve dependency-bearing middleware through DI. Prefer service references over serializing service objects into the compiled route cache.
 
 ## Parameter Binding
 
@@ -96,11 +121,18 @@ Use either route files or attributes according to the application's established 
 
 Name every route used by redirects or links. Duplicate paths or names fail route loading.
 
-`Router::setup()` caches route trees under key/tag `routes`. After route source changes, normal container/application startup should rebuild as configured; if stale cache persists, use the installed cache command with the route tag rather than clearing unrelated storage:
+`Router::setup()` first loads a valid compiled PHP route artifact. Otherwise it loads route files and controller attributes, resolves middleware groups and service references, and compiles the artifact when `cache.autoCompile` is enabled.
+
+The artifact contains the finalized matcher tree and scalar service identifiers. Direct middleware, validators, object handlers, and serializable closures use an object pool for backward compatibility; prefer DI service references for dependency-bearing objects. `cache.checkTimestamps` also tracks route-file and controller-directory membership, but is disabled by default to avoid production filesystem scans.
+
+Compile or remove the artifact explicitly with:
 
 ```sh
-php bin/console cache:clean --tag=routes
+php bin/console routes:cache:compile
+php bin/console routes:cache:clean
 ```
+
+`routes:cache:clear` is an alias for `routes:cache:clean`. Explicit compilation fails with diagnostics when an object cannot be serialized. Automatic compilation failure leaves the already-loaded live routes usable and does not replace a valid cache with an incomplete file.
 
 ## Verification
 
