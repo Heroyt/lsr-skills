@@ -67,7 +67,7 @@ languages/
   en_GB/LC_MESSAGES/UI.po
 ```
 
-Native gettext consumes compiled `UI.mo`. Do not edit MO or generated Vue JSON manually.
+Commit only PO catalog sources. Native gettext consumes compiled MO files and Vue consumes generated JSON bundles; compile both from PO during the application's Docker/CI build and copy them into the runtime artifact. Never edit or commit generated MO/JSON files.
 
 Keep system/application UI in gettext. Keep administrator-authored multilingual content in explicit database fields/tables and editing interfaces; it is not a gettext catalog entry.
 
@@ -87,7 +87,7 @@ Expose clear scripts such as `i18n:extract`, `i18n:validate`, and `i18n:compile`
 
 `Translations` can collect missing messages at runtime when `CHECK_TRANSLATIONS` and Tracy/debug behavior enable it, then write PO/MO/POT through `updateTranslations()`. Treat this as a development bridge, not the preferred deterministic extractor. Never enable catalog mutation in production workers.
 
-Follow the application's policy on committing generated MO/JSON. Whatever the choice, builds must reproduce them from PO.
+The build must fail when PO validation or MO/JSON compilation fails. Production startup must consume immutable compiled artifacts; it must not compile or mutate catalogs.
 
 ## Locale Representations
 
@@ -160,7 +160,7 @@ Use installed `lsr/routing` localized variants and `lsr/core` link generation. D
 ## Verification
 
 - PO extraction/merge is deterministic and idempotent.
-- Every PO validates and compiles to MO and optional Vue JSON.
+- Every PO validates and compiles to MO and, when the Vue compatibility layer is enabled, locale JSON during the Docker/CI build.
 - PHP and Vue render equivalent singular, contextual, plural, and contextual-plural examples.
 - Named placeholders match and interpolate identically.
 - Backend locale drives route, PHP/Latte, Inertia props, Vue bundle, `<html lang>`, and `Intl` formatting.
