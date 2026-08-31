@@ -141,7 +141,7 @@ When changing a skill:
 
 ```sh
 npm run validate
-npx --yes skills@latest add . --list
+npx --yes skills@1.5.23 add . --list
 ```
 
 GitHub Actions runs both checks for every push and pull request.

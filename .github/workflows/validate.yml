@@ -17,10 +17,10 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.20.0
 
       - name: Validate repository contracts
         run: npm run validate
 
       - name: Verify Skills CLI discovery
-        run: npx --yes skills@latest add . --list
+        run: npx --yes skills@1.5.23 add . --list
