@@ -1,0 +1,8 @@
+{
+  "name": "lsr-skills",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "validate": "node scripts/validate-skills.mjs"
+  }
+}

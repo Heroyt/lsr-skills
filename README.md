@@ -137,12 +137,14 @@ When changing a skill:
 3. keep examples generic and avoid credentials or private infrastructure;
 4. link related skills instead of duplicating large workflows;
 5. preserve modular DI, route, and migration guidance;
-6. list the catalog locally and smoke-test installation:
+6. run the repository contract checks and verify Skills CLI discovery:
 
 ```sh
-npx skills add . --list
-npx skills add . --skill lsr-framework-orchestration --agent '*' --yes
+npm run validate
+npx --yes skills@latest add . --list
 ```
+
+GitHub Actions runs both checks for every push and pull request.
 
 Use focused Gitmoji commits according to [`CONTEXT.md`](CONTEXT.md).
 
