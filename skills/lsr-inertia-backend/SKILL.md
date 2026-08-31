@@ -5,7 +5,7 @@ description: Use for lsr/inertia backend integration, WithInertia controller res
 
 # LSR Inertia Backend
 
-Use `lsr-vue-inertia-shadcn` for Vue page code and `lsr-localization` for server-owned locale props and gettext synchronization.
+Use `lsr-vue-inertia` for Vue page code and `lsr-localization` for server-owned locale props and gettext synchronization.
 
 ## Read the Installed Adapter
 

@@ -120,7 +120,7 @@ Jobs and schedules are application services. Make retryable work idempotent, kee
 - CQRS: `lsr-cqrs`
 - console: `lsr-console`
 - jobs/runtime/scheduler: `lsr-async-jobs`, `lsr-roadrunner-runtime`, `lsr-scheduler`
-- Latte/Inertia/Vue: `lsr-latte-stack`, `lsr-inertia-backend`, `lsr-vue-inertia-shadcn`
+- Latte/Inertia/Vue: `lsr-latte-stack`, `lsr-inertia-backend`, `lsr-vue-inertia`
 - translations: `lsr-localization`
 - logging: `lsr-logging`
 - review: `lsr-quality-rules`

@@ -97,7 +97,7 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 | --- | --- |
 | [`lsr-latte-stack`](skills/lsr-latte-stack/SKILL.md) | Server-rendered Latte, typed parameters, LSR tags/functions, extensions, assets, and sandbox rendering. |
 | [`lsr-inertia-backend`](skills/lsr-inertia-backend/SKILL.md) | `lsr/inertia` middleware/responses, typed props, partial/deferred/merge/once behavior, and the Latte shell. |
-| [`lsr-vue-inertia-shadcn`](skills/lsr-vue-inertia-shadcn/SKILL.md) | Optional Vue 3 + TypeScript + Inertia frontend work and project-configured shadcn-vue integration. |
+| [`lsr-vue-inertia`](skills/lsr-vue-inertia/SKILL.md) | Optional Vue 3 + TypeScript + Inertia frontend pages, typed props/forms, navigation, layouts, and shared state. |
 | [`lsr-localization`](skills/lsr-localization/SKILL.md) | Native gettext PO/MO catalogs, plurals/contexts/domains, localized routes/Latte, and optional `vue3-gettext` parity. |
 
 ## Core principles
