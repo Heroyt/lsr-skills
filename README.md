@@ -115,6 +115,8 @@ The skills intentionally require agents to inspect the application before editin
 
 The repository tracks the current LSR `0.x` package family and PHP 8.4-era framework source. Because each Composer package releases independently, no skill assumes that all installed packages share one version. Guidance repeatedly points to installed config schemas and source where behavior is version-sensitive.
 
+Distribution intentionally follows rolling `master` for now; tagged releases and a package-version compatibility matrix are not maintained. Run `npx skills update` to receive the latest reviewed guidance.
+
 The skills themselves contain Markdown instructions only and do not install PHP or frontend dependencies.
 
 ## Contributing
