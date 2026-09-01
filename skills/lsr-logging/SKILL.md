@@ -117,6 +117,8 @@ Bound context size and avoid retaining throwable/object graphs in singleton stat
 - Logging failures must not silently replace the original application failure; test unwritable/full storage behavior.
 - Metrics measure rates/durations; logs explain individual events. Do not use high-cardinality logs as a metric substitute.
 
+Use `lsr-observability` for OpenTelemetry traces, metrics, context propagation, and runtime flush behavior. Logging and telemetry may correlate one operation, but do not duplicate event export through automatic and manual bridges.
+
 ## Verification
 
 - Emit representative PSR levels through the real application/runtime.

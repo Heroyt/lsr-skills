@@ -40,7 +40,8 @@ Optional orchestration:
 - `lsr/console` — Symfony Console DI command loading;
 - `lsr/inertia` — Inertia response/middleware adapter;
 - `lsr/roadrunner` — HTTP/jobs workers and task production;
-- `lsr/scheduler` — Symfony Scheduler integration.
+- `lsr/scheduler` — Symfony Scheduler integration;
+- `lsr/otel` — OpenTelemetry providers, application tracing/metrics, framework lifecycle adapters, and runtime flush/shutdown handling.
 
 Require optional packages only for real application behavior. Do not introduce a package merely because a skill exists.
 
@@ -107,6 +108,7 @@ Jobs and schedules are application services. Make retryable work idempotent, kee
 - Models/migrations/serialization stay aligned.
 - RoadRunner/scheduler processes never retain request, auth, tenant, locale, or model state between work items.
 - Backend owns active locale; Latte, Inertia, routes, catalogs, and browser formatting stay synchronized.
+- Telemetry context and attributes never leak between work items; exporter failure never changes application control flow.
 
 ## Choose the Focused Skill
 
@@ -122,7 +124,7 @@ Jobs and schedules are application services. Make retryable work idempotent, kee
 - jobs/runtime/scheduler: `lsr-async-jobs`, `lsr-roadrunner-runtime`, `lsr-scheduler`
 - Latte/Inertia/Vue: `lsr-latte-stack`, `lsr-inertia-backend`, `lsr-vue-inertia`
 - translations: `lsr-localization`
-- logging: `lsr-logging`
+- logging/telemetry: `lsr-logging`, `lsr-observability`
 - review: `lsr-quality-rules`
 
 ## Verification Strategy
@@ -136,4 +138,5 @@ Verify at the deepest changed interface, then cross the integration seam:
 - scheduler: run through `scheduler:run` or the runner;
 - presentation: render/navigate in a browser;
 - localization: compile catalogs and compare PHP/Vue output;
+- observability: inspect exported spans/metrics and exercise no-op, flush, and context-cleanup paths;
 - always run repository-defined static analysis/tests for changed contracts.

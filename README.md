@@ -90,6 +90,7 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 | [`lsr-async-jobs`](skills/lsr-async-jobs/SKILL.md) | RoadRunner task payloads/dispatchers, `TaskProducer`, serializers, acknowledgement, retries, and async CQRS. |
 | [`lsr-roadrunner-runtime`](skills/lsr-roadrunner-runtime/SKILL.md) | DI + `.rr.yaml`, HTTP/jobs workers, RPC/queues, process supervision, and long-running isolation. |
 | [`lsr-logging`](skills/lsr-logging/SKILL.md) | PSR-3/LSR logging, DI, structured context, redaction, storage/formatting, worker lifetime, and operations. |
+| [`lsr-observability`](skills/lsr-observability/SKILL.md) | `lsr/otel` DI, application tracing/metrics, lifecycle integrations, OTLP export, context cleanup, and worker flushing. |
 
 ### Presentation and localization
 
