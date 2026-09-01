@@ -17,7 +17,7 @@ Do not assume file paths, retention, JSON formatting, or centralized collection 
 
 ## DI Setup
 
-The package's current service file expects application constants/parameters and defines a logger, filesystem helper, and archiver. Include or reproduce it according to the application's config conventions:
+The package service file expects application constants/parameters. Its default `logger` service preserves the legacy daily text output and constructor behavior:
 
 ```neon
 parameters:
@@ -27,9 +27,37 @@ parameters:
 		logLife: '-2 days'
 ```
 
+In `lsr/logging` 0.3.2 and later, the same service file also registers:
+
+- `loggerFactory` and `loggerClock`;
+- `loggerContextNormalizer`;
+- `loggerLegacyFormatter`, `loggerJsonFormatter`, `loggerLsrFormatter`, and `loggerSyslogFormatter`;
+- JSON and RFC 5424 structured-data context serializers.
+
+Alternative formatters and serializers are deliberately not autowired. Reference the required named service explicitly when creating a structured logger. This keeps an application update from silently changing its existing log format.
+
 Keep logging config in a focused included NEON file. Ensure the runtime user can create/write the directory without broad `0777` deployment permissions.
 
 Prefer injecting `Psr\Log\LoggerInterface` or the narrow concrete capability needed. Use `Lsr\Logging\Logger` only when calling package-specific methods such as `exception()` or `logDb()`.
+
+## Storage and Formatting
+
+On 0.3.2 and later, `Logger` accepts an optional third `StorageInterface` argument. Prefer `LoggerFactory` for explicit storage/formatter combinations:
+
+- `create()` preserves the default daily legacy logger unless a storage is supplied;
+- `createDaily()` writes `name-YYYY-MM-DD.log` with the selected formatter;
+- `createRotating()` writes one size-bounded file and retains complete newest records.
+
+Available formats serve different consumers:
+
+- `LegacyFormatter`: compatible human-readable application logs;
+- `JsonLogFormatter`: one JSON object per record for JSON-aware collectors;
+- `LsrFormatter`: LSR text envelope with JSON context;
+- `SyslogFormatter`: RFC 5424 output with structured data.
+
+Context normalization is defensive, not redaction. It keeps records writable when context contains invalid UTF-8, recursion, exceptions, resources, dates, enums, or non-finite floats. Sensitive values must still be removed before logging.
+
+Check `composer.lock` before using these APIs. Earlier 0.3.x versions may not provide `LoggerFactory`, the named DI services, clock injection, or the hardened storage behavior.
 
 ## Logging Interface
 
@@ -75,7 +103,9 @@ Coordinate LSR logs, Tracy, RoadRunner stderr/log plugins, and centralized colle
 
 ## Long-Running Processes
 
-The current basic `Logger` chooses its dated file name in the constructor. A logger instance that survives midnight may continue writing to the old file. For RoadRunner/scheduler deployments, explicitly verify the selected storage/rotation strategy across date boundaries; use the package storage modules or process recycling/collector rotation as appropriate rather than assuming constructor-based filenames rotate themselves.
+The 0.3.2 daily storage resolves the dated pathname for every record, so a singleton logger continues into a new file after midnight without worker recycling. Verify the installed version before relying on this behavior; earlier 0.3.x releases selected the date when the logger was constructed.
+
+Simple and rotating file storage serialize append/rotation under an exclusive file lock. Rotation retains complete newest records within its byte limit; a single oversized record is kept intact even when it exceeds that limit. This protects process concurrency, not network filesystem semantics or multi-host collection.
 
 Bound context size and avoid retaining throwable/object graphs in singleton state.
 
@@ -90,8 +120,10 @@ Bound context size and avoid retaining throwable/object graphs in singleton stat
 ## Verification
 
 - Emit representative PSR levels through the real application/runtime.
-- Assert context formatting and redaction.
+- Assert context formatting, redaction, and fallback normalization for unsafe values.
 - Trigger one handled and one unhandled failure and inspect all destinations for duplication.
 - Test unwritable storage behavior in a disposable directory.
-- For long-running workers, cross a simulated/restarted date boundary and verify rotation/collection.
-- Run logging tests and static analysis.
+- For long-running workers, cross a simulated date boundary and verify a new dated file.
+- Exercise concurrent writers when file storage is shared by multiple local workers.
+- For rotating storage, cover the exact byte boundary and an oversized record.
+- Compile the real DI container, then run logging tests and static analysis.
