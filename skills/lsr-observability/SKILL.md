@@ -1,6 +1,6 @@
 ---
 name: lsr-observability
-description: Use for lsr/otel OpenTelemetry setup, application tracing and metrics, framework lifecycle integrations, OTLP export, context cleanup, metric cardinality, and worker flush behavior.
+description: Use for lsr/otel OpenTelemetry setup, global SDK ownership, PSR-3 correlation/export, application tracing and metrics, lifecycle integrations, OTLP export, context cleanup, cardinality, and worker flushing.
 ---
 
 # LSR Observability
@@ -11,7 +11,8 @@ Before configuring telemetry, inspect:
 
 - `composer.lock` and `vendor/lsr/otel/composer.json`;
 - `vendor/lsr/otel/src/DI/OtelExtension.php` for the installed config schema;
-- `vendor/lsr/otel/src/Tracing.php`, `Metrics.php`, and `InstrumentationRegistry.php`;
+- `vendor/lsr/otel/src/GlobalSdkRegistration.php`, `Tracing.php`, `Metrics.php`, and `InstrumentationRegistry.php`;
+- the installed `lsr/logging` and `open-telemetry/opentelemetry-auto-psr3` versions when logs are in scope;
 - installed lifecycle interfaces in every framework package being instrumented;
 - runtime entrypoints for FPM, RoadRunner HTTP/jobs, Console, and Scheduler;
 - deployment `OTEL_*` variables and the Collector/export endpoint.
@@ -29,6 +30,7 @@ extensions:
 otel:
     enabled: true
     autoShutdown: true
+    registerGlobal: true
 
     applicationInstrumentation:
         name: vendor/application
@@ -38,6 +40,51 @@ otel:
 `applicationInstrumentation.name` is a Composer-style package name. When configured, DI exposes autowireable `Lsr\Otel\Tracing` and `Lsr\Otel\Metrics` services. They remain safe no-op services when `otel.enabled` is false.
 
 Keep provider, exporter, sampler, propagator, resource, and OTLP transport configuration in standard `OTEL_*` variables. In particular, define a stable deployed `OTEL_SERVICE_NAME`; do not generate a new service or instance identity per request.
+
+## Global SDK Ownership
+
+In `lsr/otel` 0.1.1 and later, `registerGlobal` defaults to `true`. The DI-created tracer, meter,
+logger, event logger, and propagators become the OpenTelemetry globals used by automatic
+instrumentation. Registration preserves the current active context and the telemetry lifecycle
+detaches it before provider shutdown.
+
+Exactly one bootstrap may own the global SDK. Container initialization rejects existing non-noop
+global providers instead of silently splitting signals between SDKs. If another bootstrap
+intentionally owns the globals, opt out explicitly:
+
+```neon
+otel:
+    registerGlobal: false
+```
+
+Do not use the opt-out merely to suppress the conflict: identify which bootstrap owns provider
+construction, configuration, flushing, and shutdown. `otel.enabled: false` creates the safe no-op
+services without registering them globally.
+
+## PSR-3 Log Correlation and Export
+
+Use `lsr/logging:^0.3.2` with the official optional instrumentation:
+
+```sh
+composer require open-telemetry/opentelemetry-auto-psr3:^0.3
+```
+
+The instrumentation requires `ext-opentelemetry`. Set its mode before Composer autoload:
+
+```sh
+OTEL_PHP_PSR3_MODE=inject
+```
+
+- `inject` keeps the normal logger output and adds the active `trace_id` and `span_id` to PSR-3
+  context;
+- `export` keeps the normal logger output and emits one OTEL log record through the global logger
+  provider registered by `lsr/otel`.
+
+The PSR-3 package registers its hooks through Composer. Do not enable a second automatic SDK
+bootstrap merely to use those hooks; `lsr/otel` already constructs and owns the SDK through DI.
+Disable the hook with `OTEL_PHP_DISABLED_INSTRUMENTATIONS=psr3` when it is not wanted. Never combine
+`export` with a manual PSR-3 bridge, and keep SDK diagnostics off the instrumented PSR-3 path to
+avoid recursive log export.
 
 ## Framework Integrations
 
@@ -172,9 +219,12 @@ Use `lsr-logging` for event detail and `lsr-observability` for traces, rates, du
 ## Verification
 
 1. Compile the real application container and resolve `Tracing`, `Metrics`, providers, propagator, and lifecycle services.
-2. Exercise one successful and one failed operation; confirm parent/child spans, status, attributes, and cleanup.
-3. Record a counter and histogram; confirm units, descriptions, values, and bounded attributes at the Collector/backend.
-4. Disable telemetry and prove the same application path and DI graph still work through no-op providers.
-5. Run two sequential RoadRunner requests/jobs and prove the second cannot see the first context.
-6. Exercise the configured flush threshold and worker/process shutdown path.
-7. Inspect exported data for sensitive values and cardinality before production enablement.
+2. With global registration enabled, prove `Globals` resolves the same DI providers and preserves any active context.
+3. Configure a deliberate external provider owner and prove startup fails unless `registerGlobal` is false.
+4. Exercise one successful and one failed operation; confirm parent/child spans, status, attributes, and cleanup.
+5. Record a counter and histogram; confirm units, descriptions, values, and bounded attributes at the Collector/backend.
+6. Run PSR-3 `inject` and `export` in processes that set the mode before Composer autoload. Confirm injected IDs, preserved logger output, active span correlation, and exactly one exported record.
+7. Disable telemetry and prove the same application path and DI graph still work through no-op providers without changing globals.
+8. Run two sequential RoadRunner requests/jobs and prove the second cannot see the first context.
+9. Exercise the configured flush threshold and worker/process shutdown path.
+10. Inspect exported data for sensitive values and cardinality before production enablement.

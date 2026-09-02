@@ -41,7 +41,7 @@ Optional orchestration:
 - `lsr/inertia` — Inertia response/middleware adapter;
 - `lsr/roadrunner` — HTTP/jobs workers and task production;
 - `lsr/scheduler` — Symfony Scheduler integration;
-- `lsr/otel` — OpenTelemetry providers, application tracing/metrics, framework lifecycle adapters, and runtime flush/shutdown handling.
+- `lsr/otel` — OpenTelemetry providers and global SDK ownership, PSR-3 correlation/export, application tracing/metrics, lifecycle adapters, and runtime flush/shutdown handling.
 
 Require optional packages only for real application behavior. Do not introduce a package merely because a skill exists.
 

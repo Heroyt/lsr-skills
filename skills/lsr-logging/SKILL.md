@@ -1,6 +1,6 @@
 ---
 name: lsr-logging
-description: Use for lsr/logging DI setup, PSR-3 logging, structured context, exception and DB-event logging, file/storage/formatter choices, sensitive-data safety, RoadRunner lifetime, and operational verification.
+description: Use for lsr/logging DI setup, PSR-3 logging, structured context, OpenTelemetry correlation/export, storage and formatting, redaction, RoadRunner lifetime, and operational verification.
 ---
 
 # LSR Logging
@@ -101,6 +101,25 @@ Redact at the source, before data enters a generic context/exception serializer.
 
 Coordinate LSR logs, Tracy, RoadRunner stderr/log plugins, and centralized collection so one failure is observable without uncontrolled duplication.
 
+## OpenTelemetry Integration
+
+Keep `lsr/logging` free of OpenTelemetry SDK dependencies. For `lsr/logging` 0.3.2 and later,
+`lsr/otel` 0.1.1 and the official `open-telemetry/opentelemetry-auto-psr3` package provide the
+integration:
+
+- `OTEL_PHP_PSR3_MODE=inject` adds the active `trace_id` and `span_id` to context while preserving
+  the configured file/structured output;
+- `OTEL_PHP_PSR3_MODE=export` preserves that output and additionally emits one OTEL log record.
+
+The mode must be set before Composer autoload, and the automatic instrumentation requires
+`ext-opentelemetry`. Let `lsr/otel` own global SDK registration by default. If another SDK bootstrap
+owns the globals, configure `otel.registerGlobal: false` deliberately rather than running two
+provider stacks. Never combine automatic export with a manual bridge, and do not route SDK-internal
+diagnostics through the instrumented PSR-3 logger.
+
+Load `lsr-observability` for package installation, global provider ownership, lifecycle, export, and
+conflict verification.
+
 ## Long-Running Processes
 
 The 0.3.2 daily storage resolves the dated pathname for every record, so a singleton logger continues into a new file after midnight without worker recycling. Verify the installed version before relying on this behavior; earlier 0.3.x releases selected the date when the logger was constructed.
@@ -129,3 +148,4 @@ Use `lsr-observability` for OpenTelemetry traces, metrics, context propagation, 
 - Exercise concurrent writers when file storage is shared by multiple local workers.
 - For rotating storage, cover the exact byte boundary and an oversized record.
 - Compile the real DI container, then run logging tests and static analysis.
+- When OpenTelemetry logging is enabled, run `inject` and `export` in fresh processes that set the mode before Composer autoload; verify correlation IDs, preserved local output, and exactly one exported record.
