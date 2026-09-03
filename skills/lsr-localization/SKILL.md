@@ -52,7 +52,8 @@ Current semantics support:
 - plural through `ngettext` / `dngettext`;
 - context by gettext's `context\004message` convention;
 - configured domains;
-- optional positional `sprintf` formatting after translation.
+- formatting through the shared `format` argument: numeric keys use positional `sprintf`, while string keys use
+  vue-gettext-compatible named placeholders.
 
 Latte exposes LSR translation tags/functions/filters through the installed extensions. Prefer those over direct catalog access in templates.
 
@@ -134,15 +135,27 @@ Initialize Vue from the first page and synchronize/lazy-load before displaying a
 
 ## Named Placeholder Compatibility
 
-`vue3-gettext` commonly uses named placeholders such as `%{player}`. Current LSR backend formatting uses positional `sprintf`. Until the framework exposes shared named interpolation, add an application-owned adapter that:
+`lsr/core` 0.4.4 and newer supports vue-gettext-compatible placeholders directly through the existing `format`
+argument:
 
-- retrieves singular/context/plural/domain translations through LSR/gettext without positional formatting;
-- replaces `%{name}` from an explicit scalar map;
-- exposes plural count as an agreed named parameter;
-- fails clearly on missing/extra placeholders in development/tests;
-- never treats interpolated output as trusted HTML.
+```php
+lang(
+    'Player %{player} has %{ points } points',
+    format: ['player' => $playerName, 'points' => $points],
+);
+```
 
-Add a build-time validator requiring each translation to preserve the exact placeholder-name set from its `msgid`/plural forms. Keep the adapter's interface aligned with gettext semantics so it can later move into a dedicated LSR package without changing callers.
+Use either numeric or string keys, never both:
+
+- numeric keys preserve positional `sprintf` formatting;
+- string keys replace `%{name}` placeholders after translation, including repeated placeholders and whitespace inside
+  the braces;
+- values must be scalar or `null`;
+- unresolved named placeholders remain unchanged;
+- mixed key modes and non-scalar values throw `InvalidArgumentException`.
+
+Never treat interpolated output as trusted HTML. Add a build-time validator requiring each translation to preserve the
+exact placeholder-name set from its `msgid`/plural forms.
 
 ## Localized Routes
 
