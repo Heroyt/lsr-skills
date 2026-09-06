@@ -90,6 +90,8 @@ Application services remain alive between requests. Therefore:
 - reset custom request-scoped registries explicitly;
 - test sequential requests with different identities and locales.
 
+Database connections can outlive the server's idle timeout even when `isConnected()` is true. For `lsr/db` 0.3.15+, see [the database skill's reconnect contract](../lsr-db/SKILL.md#idle-mysql-connections-in-long-running-processes): `autoReconnect` is an explicit per-connection opt-in, not a RoadRunner setting or lifecycle hook. It checks before package-managed SQL, never replays failed statements, and cannot resume a lost transaction or restore session state. Apply the same policy to jobs workers; queue retries remain a separate idempotency decision.
+
 ## Jobs Worker Lifecycle
 
 Current `JobsWorker` clears ORM instances, resolves a DI dispatcher by task name, deserializes payload, invokes it, and acknowledges unless already completed. Exceptions are nacked/logged. Queue acceptance is not processing success.
@@ -114,3 +116,4 @@ Keep HTTP and jobs worker services safe for their respective modes. Do not injec
 6. Restart workers and verify durability expectations.
 7. Observe logs, metrics, timeouts, memory limits, and graceful shutdown.
 8. Run application static analysis/tests for touched runtime modules.
+9. If DB reconnect is enabled, expire or kill an idle connection between work items in a disposable environment, then verify recovery on the next package query. Also verify that connection loss during SQL or a transaction fails without automatic replay.

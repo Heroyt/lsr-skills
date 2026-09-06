@@ -130,6 +130,8 @@ php bin/console scheduler:run
 
 When RoadRunner supervises it, configure it as a service with one process and restart policy. Do not launch it inside every HTTP worker.
 
+Scheduler processes also retain database connections between invocations. For `lsr/db` 0.3.15+, [the database skill](../lsr-db/SKILL.md#idle-mysql-connections-in-long-running-processes) documents opt-in `autoReconnect` for idle MySQL connections. It is a connection configuration option, not a scheduler retry policy: lost transactions and interrupted statements still fail, and job retry/idempotency remains application-owned.
+
 ## Verification
 
 - Force container compilation and confirm both `scheduler:run` and `debug:scheduler` are registered.

@@ -74,7 +74,7 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 
 | Skill | Use for |
 | --- | --- |
-| [`lsr-db`](skills/lsr-db/SKILL.md) | Connection/bootstrap, the DB facade, dibi fluent queries, typed DTO fetches, caching, and transactions. |
+| [`lsr-db`](skills/lsr-db/SKILL.md) | Connection/bootstrap, the DB facade, dibi fluent queries, typed DTO fetches, caching, transactions, and opt-in idle MySQL reconnects. |
 | [`lsr-db-migrations`](skills/lsr-db-migrations/SKILL.md) | Domain-split migration includes, definitions/modifications, indexes, foreign keys, views, and installer verification. |
 | [`lsr-orm`](skills/lsr-orm/SKILL.md) | Models, primary keys, properties, queries, persistence, relations, model cache, and schema alignment. |
 | [`lsr-cache`](skills/lsr-cache/SKILL.md) | File/Redis cache configuration, namespaces, dependencies, tags, invalidation, and commands. |

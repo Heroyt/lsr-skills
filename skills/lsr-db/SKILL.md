@@ -1,6 +1,6 @@
 ---
 name: lsr-db
-description: Use for LSR database setup and access with Lsr\Db\Connection, the DB facade, dibi fluent queries, typed DTO fetches, caching, named connections, and transactions.
+description: Use for LSR database setup and access with Lsr\Db\Connection, the DB facade, dibi fluent queries, typed DTO fetches, caching, named connections, transactions, and opt-in MySQL reconnects in long-running workers.
 ---
 
 # LSR Database
@@ -24,9 +24,53 @@ Keep this in the application bootstrap, not in request handlers. Named connectio
 
 ## Connection Configuration
 
-`Connection` accepts a configuration array. Current options include `driver`, host/port/database credentials, `dsn`, `pdoDriver`, `options`, `prefix`, `lazy`, and `strictSelectForUpdate`. Treat credentials as private runtime configuration.
+`Connection` accepts a configuration array. Current options include `driver`, host/port/database credentials, `dsn`, `pdoDriver`, `options`, `prefix`, `lazy`, `strictSelectForUpdate`, and (since `lsr/db` 0.3.15) `autoReconnect`. Treat credentials as private runtime configuration.
 
 Use an explicit PDO driver/DSN for non-MySQL databases. Read `Connection::normalizeConfig()` in the installed package rather than guessing DSN behavior.
+
+## Idle MySQL Connections in Long-Running Processes
+
+RoadRunner, jobs, and scheduler processes can retain the same connection after the server closes an idle socket. Dibi's `isConnected()` only indicates that a driver exists; it is not a liveness check.
+
+Starting with `lsr/db` **0.3.15**, opt in per connection with `autoReconnect: true`. It defaults to **false**. Inspect the installed package version and the application's existing connection configuration before enabling it.
+
+For an application that passes `%db%` directly to `Connection`, add the option to that existing parameter:
+
+```neon
+parameters:
+	db:
+		autoReconnect: true
+```
+
+For the optional `Lsr\Db\DI\DbExtension`, add it to the intended connection:
+
+```neon
+db:
+	connections:
+		main:
+			autoReconnect: true
+```
+
+These are additions to existing configuration, not complete connection definitions. PHP callers can add `'autoReconnect' => true` to the array passed to `Connection` or `DB::createConnection()`. `DB_autoReconnect=true` is read only by `DB::getMain()` when it builds configuration from the environment; it does not override an explicit array or DI configuration.
+
+### Recovery Contract
+
+- Supported drivers are MySQLi and PDO-MySQL. Other database drivers are unchanged.
+- Package query/write helpers and LSR fluent execution/fetch/count paths check health before submitting SQL outside a managed transaction. Cache hits do not execute a database health check.
+- The check adds one server round trip per executed operation outside a managed transaction: MySQLi uses `stat()` rather than deprecated `ping()`; PDO-MySQL uses `SELECT 1`.
+- A health-check connection loss (MySQL codes `2006`, `2013`, or `2055`) triggers one disconnect/connect attempt. A failed reconnect propagates; there is no retry loop.
+- The same Dibi connection object is retained, so existing fluent builders, substitutions, and lifecycle listeners remain attached.
+- An application statement that loses its connection is **never replayed** by this mechanism. Syntax/constraint errors propagate without reconnecting. Cached fetches must not treat a database exception as a cache failure and rerun the SQL.
+
+### Safety Limits
+
+- Manage transactions through `Connection`/`DB` `begin()`, `commit()`, `rollback()`, or `transaction()`. No reconnect occurs while a managed transaction or nested scope remains active.
+- A failed commit does not clear transaction tracking. On connection loss, unwind with rollback; the outermost failed rollback discards the dead connection when reconnect is enabled, allowing later work to establish a fresh session.
+- `transaction()` preserves the original callback/commit exception even if rollback also fails. A caught nested failure does not make the outer transaction safe to continue. `close()` discards connection/transaction state; it never commits unfinished work.
+- Raw Dibi/native-handle access, retained native resources, and raw SQL transaction control are outside the guarantee. Do not enable automatic reconnect for flows relying on these or on connection-scoped session state.
+- Temporary tables, advisory locks, session variables, and other session state cannot be restored by reconnecting. A disconnect during SQL execution can leave its outcome unknown; do not blindly replay writes, transaction callbacks, or entire jobs.
+
+Use `lsr-roadrunner-runtime` and `lsr-scheduler` for process lifecycle and supervision. Package-level reconnect does not install a worker lifecycle hook or require closing/reopening the DB on every request.
 
 ## Fluent Reads
 
@@ -86,3 +130,7 @@ The method returns `void`; return application results through an outer variable 
 - For writes, verify commit and rollback paths plus cache visibility.
 - Run the project's DB tests, static analysis, and coding-standard command.
 - When changing connection configuration, exercise the real application entrypoint so bootstrap initialization is covered.
+- For reconnect changes, kill an idle session or expire `wait_timeout` on a disposable MySQL/MariaDB server. Verify reads, writes, prebuilt fluent queries, and insert ID/affected-row metadata with both MySQLi and PDO-MySQL.
+- Kill a query during execution and a connection inside nested transactions: the operation must fail without replay or partial continuation, preserve the original exception, and allow fresh work only after transaction unwind.
+- Verify opt-out, a failed reconnect, and ordinary SQL errors. Do not use a production database for these checks.
+- In the package checkout, the MySQL tests opt in via `LSR_DB_TEST_PORT=<port> vendor/bin/phpunit --no-coverage`, targeting `127.0.0.1`, database `reconnect_test`, and a disposable root account with an empty password. Without the variable, those integration cases skip.
