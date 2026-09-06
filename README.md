@@ -88,7 +88,7 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 | [`lsr-console`](skills/lsr-console/SKILL.md) | Symfony Console DI discovery, `AsCommand`, lazy commands, maintenance commands, and CLI behavior. |
 | [`lsr-scheduler`](skills/lsr-scheduler/SKILL.md) | `SchedulerJobInterface`, cron/periodic triggers, scheduled commands, diagnostics, shared state/locks, and supervision. |
 | [`lsr-async-jobs`](skills/lsr-async-jobs/SKILL.md) | RoadRunner task payloads/dispatchers, `TaskProducer`, serializers, acknowledgement, retries, and async CQRS. |
-| [`lsr-roadrunner-runtime`](skills/lsr-roadrunner-runtime/SKILL.md) | DI + `.rr.yaml`, HTTP/jobs workers, RPC/queues, process supervision, and long-running isolation. |
+| [`lsr-roadrunner-runtime`](skills/lsr-roadrunner-runtime/SKILL.md) | DI + `.rr.yaml`, HTTP/jobs workers, RPC/queues, process supervision, optional same/separate-container SSR Node services, and long-running isolation. |
 | [`lsr-logging`](skills/lsr-logging/SKILL.md) | PSR-3/LSR logging, DI, structured context, OpenTelemetry correlation/export, redaction, storage/formatting, worker lifetime, and operations. |
 | [`lsr-observability`](skills/lsr-observability/SKILL.md) | `lsr/otel` DI, global SDK ownership, PSR-3 integration, tracing/metrics, OTLP export, context cleanup, and worker flushing. |
 
@@ -97,8 +97,8 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 | Skill | Use for |
 | --- | --- |
 | [`lsr-latte-stack`](skills/lsr-latte-stack/SKILL.md) | Server-rendered Latte, typed parameters, LSR tags/functions, extensions, assets, and sandbox rendering. |
-| [`lsr-inertia-backend`](skills/lsr-inertia-backend/SKILL.md) | `lsr/inertia` middleware/responses, typed props, partial/deferred/merge/once behavior, and the Latte shell. |
-| [`lsr-vue-inertia`](skills/lsr-vue-inertia/SKILL.md) | Optional Vue 3 + TypeScript + Inertia frontend pages, typed props/forms, navigation, layouts, and shared state. |
+| [`lsr-inertia-backend`](skills/lsr-inertia-backend/SKILL.md) | `lsr/inertia` middleware/responses, normalized typed props, partial/deferred/merge/once behavior, opt-in V3 SSR with CSR fallback, and Latte head/body outlets. |
+| [`lsr-vue-inertia`](skills/lsr-vue-inertia/SKILL.md) | Optional Vue 3 + TypeScript + Inertia frontend pages, typed props/forms, navigation, layouts, shared state, SSR entrypoints and hydration/fallback. |
 | [`lsr-localization`](skills/lsr-localization/SKILL.md) | Native gettext PO/MO catalogs, plurals/contexts/domains, localized routes/Latte, and optional `vue3-gettext` parity. |
 
 ## Core principles

@@ -1,6 +1,6 @@
 ---
 name: lsr-roadrunner-runtime
-description: Use for LSR RoadRunner installation, DI and .rr.yaml coordination, worker entrypoints, HTTP/jobs modes, RPC/queue configuration, long-running state isolation, supervision, and runtime verification.
+description: Use for LSR RoadRunner installation, DI and .rr.yaml coordination, worker entrypoints, HTTP/jobs modes, RPC/queue configuration, long-running state isolation, supervision including optional Inertia SSR Node processes, and runtime verification.
 ---
 
 # LSR RoadRunner Runtime
@@ -106,6 +106,28 @@ Keep HTTP and jobs worker services safe for their respective modes. Do not injec
 - Bound worker lifetime/memory as a safety net, not a substitute for leak-free code.
 - Configure scheduler or other long-lived services under supervision separately; do not run one scheduler per HTTP worker.
 
+## Optional Inertia SSR Node Process
+
+Use `lsr-inertia-backend` for PHP configuration/fallback and `lsr-vue-inertia` for the renderer bundle and hydration. SSR is opt-in; `lsr/inertia` does not manage Node, and a Node renderer is not a RoadRunner PHP worker mode.
+
+Support either application-owned private topology:
+
+- **Same container:** supervise one app-specific Node renderer alongside RoadRunner, using the installed RoadRunner Service plugin or the application's existing supervisor. Confirm the binary includes the plugin and read its version's config schema before adding a `service` block. Bind Node to loopback and set PHP's endpoint to `http://127.0.0.1:13714/render`. Do not spawn one renderer per PHP worker or per request.
+- **Separate container:** run the matching app SSR bundle in a dedicated Node container, reachable from PHP by private service DNS (for example `http://ssr:13714/render`). Bind to the container network as needed, but publish no host port or public reverse-proxy route. Do not share one app's bundle as a generic renderer for other independently deployed applications.
+
+Both topologies require:
+
+- client/server bundles from the same app revision and root/page/layout contracts;
+- explicit start/restart policy, finite shutdown grace, logs, memory/CPU limits, and ownership of child termination;
+- finite PHP connect/total deadlines on a dedicated PSR-18 client;
+- readiness that distinguishes a live Node process from a renderer capable of rendering a real page;
+- default PHP CSR fallback on renderer outage; use strict mode when verifying that SSR actually works;
+- isolation of request/auth/locale/store data in both long-lived PHP and Node processes.
+
+Inspect the installed renderer's endpoints: management routes such as `/shutdown` must never be exposed publicly. Treat rendered head/body as trusted application HTML, not sanitized output from an arbitrary HTTP service. Keep browser session credentials out of renderer transport.
+
+Deploy each consuming application independently. Package publication does not build its SSR bundle, migrate its template or update its `.rr.yaml`/Docker services.
+
 ## Verification
 
 1. Validate `.rr.yaml` with the installed RoadRunner binary.
@@ -117,3 +139,4 @@ Keep HTTP and jobs worker services safe for their respective modes. Do not injec
 7. Observe logs, metrics, timeouts, memory limits, and graceful shutdown.
 8. Run application static analysis/tests for touched runtime modules.
 9. If DB reconnect is enabled, expire or kill an idle connection between work items in a disposable environment, then verify recovery on the next package query. Also verify that connection loss during SQL or a transaction fails without automatic replay.
+10. For Inertia SSR, exercise a real rendered page, Node stop/restart, deadline/fallback behavior and sequential identity/locale isolation. Verify browser hydration and fallback mounting; a healthy PHP worker is not proof of healthy SSR.

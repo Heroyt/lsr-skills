@@ -1,6 +1,6 @@
 ---
 name: lsr-vue-inertia
-description: Use for Vue 3 and TypeScript frontends served by lsr/inertia, including page resolution, typed props and forms, layouts, navigation, and shared locale or auth state.
+description: Use for Vue 3 and TypeScript frontends served by lsr/inertia, including page resolution, typed props and forms, layouts, navigation, shared locale/auth state, and Inertia V3 SSR entrypoints, hydration and client fallback.
 ---
 
 # LSR Vue and Inertia
@@ -16,6 +16,7 @@ This is an optional application stack, not a requirement of LSR core. Use `lsr-i
 - shared layouts and page-prop types;
 - the established component system and styling configuration;
 - backend `$this->inertia('...')` component names.
+- for SSR: installed Inertia/Vue renderer versions, server entrypoint, Vite SSR/build configuration, and the PHP head/body outlets
 
 Do not impose one application's paths, styling system, icons, component library, or package manager on another application.
 
@@ -82,8 +83,26 @@ For localized applications, Vue's active locale comes from backend-owned Inertia
 
 Use BCP 47 tags such as `cs-CZ` for `Intl` and gettext locale IDs such as `cs_CZ` for catalogs. Centralize their mapping.
 
+## Inertia V3 SSR and Hydration
+
+Use [the backend skill's SSR contract](../lsr-inertia-backend/SKILL.md#optional-ssr-configuration) for PHP DI, normalized page data, request opt-out and failure handling. LSR owns only the PHP-to-renderer seam and shell outputs; the application owns the Node entrypoint, Vite configuration, client assets and process deployment. Do not introduce Laravel's Artisan commands, Blade directives or Vite facade into an LSR app.
+
+- Use the installed `@inertiajs/vue3/server` API with `createInertiaApp()`, Vue `createSSRApp()` and `@vue/server-renderer`'s `renderToString`. Inspect the installed API before configuring ports, hosts or Vite's SSR integration.
+- Share component names, page resolution, layouts, plugins, root ID and initial state between client/server entries. Build both outputs from the same revision and keep the SSR bundle/server-only imports out of public client assets.
+- In V3, initial page data lives in a `<script type="application/json" data-page="app">`, not the legacy root's `data-page` attribute. Successful renderer output includes that script and the root bearing `data-server-rendered="true"`. PHP must emit the full body once.
+- Let the installed adapter's supported setup handle mount versus hydration. If the app owns a manual `setup`, use `createSSRApp` for the server-rendered marker and `createApp` for an empty CSR fallback root, then install the same Inertia plugin. Do not assume every response is server-rendered merely because SSR is enabled.
+- Keep browser globals, DOM APIs, storage, timers and browser-only library imports out of server evaluation. Initialize browser-only behavior after mounting; use a deterministic initial placeholder where needed, not differing first-render trees.
+- Create mutable auth/locale/store state per render. Node is long-lived too: never retain one user's props, translations, permissions or store in module-level mutable state.
+- Match locale, timezone and date/number formatting on both sides. Avoid initial output depending on random values, local clocks or viewport measurements. Deferred data is still deferred; SSR must not fetch it eagerly to fill the initial tree.
+- Use Vue `Head` with deliberate title/meta ownership. PHP's `inertiaHead` contains renderer head output; duplicating shell titles/meta is not a hydration solution.
+- A Vite SSR endpoint, when supported by the installed integration, is an explicit PHP URL such as `http://<vite-host>:<vite-port>/__inertia_ssr`; it is distinct from a production Node `/render` endpoint. A successful `null` warmup response uses CSR.
+
+For same-container or separate-container Node supervision, private networking and release coordination, use `lsr-roadrunner-runtime`. Neither topology makes SSR mandatory for every application.
+
 ## Verification
 
 Run scripts actually defined by `package.json`: normally formatting or linting, `vue-tsc` or TypeScript checking, tests for changed observable contracts, and a production build.
 
 For UI changes, start the real application, navigate through the changed Inertia flow, submit successful and failing forms, verify partial or deferred behavior if touched, and inspect the page in a browser at relevant viewport sizes.
+
+For SSR changes, also build/run the actual server entry, inspect the initial response with JavaScript disabled for expected content/head, then enable JavaScript and verify warning-free hydration and interaction. Stop Node and verify the same browser entry mounts the CSR fallback and navigation/deferred requests still work. PHP returning 200 alone does not prove SSR succeeded.
