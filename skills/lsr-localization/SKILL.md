@@ -1,6 +1,6 @@
 ---
 name: lsr-localization
-description: Use for LSR internationalization/localization with native gettext, PO/MO catalogs, contexts/plurals/domains, localized routes and Latte, plus optional vue3-gettext and Inertia locale synchronization.
+description: Use for LSR internationalization/localization with native gettext, PO/MO catalogs, contexts/plurals/domains, localized routes, sitemap hreflang alternatives and Latte, plus optional vue3-gettext and Inertia locale synchronization.
 ---
 
 # LSR Localization with Gettext
@@ -161,6 +161,17 @@ exact placeholder-name set from its `msgid`/plural forms.
 
 Use installed `lsr/routing` localized variants and `lsr/core` link generation. Do not duplicate a route per locale manually. Backend locale selection, generated links, canonical route, catalogs, and Inertia props must change as one request-level operation.
 
+### Localized Sitemaps
+
+With `lsr/routing` 0.4.2 or newer, use the declarations and discovery described in `lsr-routing` instead of traversing the Router's matcher tree or guessing paths. `getSitemapEntries($name)` returns one descriptor per canonical language path, with the same `hreflang => Route` alternative map on every descriptor, including self when a locale is declared.
+
+Render according to [Google's localized sitemap requirements](https://developers.google.com/search/docs/specialty/international/localized-versions#sitemap): one `<url>`/`<loc>` per translated URL, an identical set of `<xhtml:link rel="alternate">` children on each, fully qualified URLs, and the XHTML namespace. The routing package does not render XML.
+
+Alternative keys normalize `cs_CZ` to `cs-cz`; preserve the route's original `getLocale()` when calling exact localized link generation. Never infer `x-default` from a locale-neutral primary route. Declaring `x-default` as a route locale requires corresponding application locale handling; fallback links can also be added by the application generator.
+
+Content availability and translated parameter values remain application-owned. Filter unavailable translations out of both URL entries and every alternative map for that record. Generic route hints are available through `$entry->route->getMeta()` independently of sitemap participation; sitemap settings live in `$entry->metadata`.
+
+
 ## Safety and Migration
 
 - Prefer context over unnatural message IDs when one source string has multiple meanings.
@@ -179,4 +190,5 @@ Use installed `lsr/routing` localized variants and `lsr/core` link generation. D
 - Backend locale drives route, PHP/Latte, Inertia props, Vue bundle, `<html lang>`, and `Intl` formatting.
 - Two sequential RoadRunner requests with different locales remain isolated.
 - Fuzzy/obsolete/missing entries follow the documented release policy.
+- Localized sitemap URLs and alternate maps agree on available translations, include self/reciprocal links, and match before/after compiled-route cache hydration.
 - Run backend tests/static analysis, frontend typecheck/tests/build, and a browser language-switch smoke flow.

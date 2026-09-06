@@ -66,7 +66,7 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 
 | Skill | Use for |
 | --- | --- |
-| [`lsr-routing`](skills/lsr-routing/SKILL.md) | Modular route files, groups, middleware, attributes, parameter validators, named/localized routes, and links. |
+| [`lsr-routing`](skills/lsr-routing/SKILL.md) | Modular routes, groups, middleware, attributes, generic metadata, named/localized routes, sitemap discovery and links. |
 | [`lsr-request-flow`](skills/lsr-request-flow/SKILL.md) | Route dispatch, controllers, middleware, action argument/model binding, mapped request DTOs, and responses. |
 | [`lsr-auth-session`](skills/lsr-auth-session/SKILL.md) | `lsr/auth`, user models, login/register/logout, authorization middleware, sessions, and cookies. |
 
@@ -99,7 +99,7 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 | [`lsr-latte-stack`](skills/lsr-latte-stack/SKILL.md) | Server-rendered Latte, typed parameters, LSR tags/functions, extensions, assets, and sandbox rendering. |
 | [`lsr-inertia-backend`](skills/lsr-inertia-backend/SKILL.md) | `lsr/inertia` middleware/responses, normalized typed props, partial/deferred/merge/once behavior, opt-in V3 SSR with CSR fallback, and Latte head/body outlets. |
 | [`lsr-vue-inertia`](skills/lsr-vue-inertia/SKILL.md) | Optional Vue 3 + TypeScript + Inertia frontend pages, typed props/forms, navigation, layouts, shared state, SSR entrypoints and hydration/fallback. |
-| [`lsr-localization`](skills/lsr-localization/SKILL.md) | Native gettext PO/MO catalogs, plurals/contexts/domains, localized routes/Latte, and optional `vue3-gettext` parity. |
+| [`lsr-localization`](skills/lsr-localization/SKILL.md) | Native gettext PO/MO catalogs, plurals/contexts/domains, localized routes/Latte, sitemap hreflang alternatives, and optional `vue3-gettext` parity. |
 
 ## Core principles
 

@@ -113,7 +113,7 @@ Jobs and schedules are application services. Make retryable work idempotent, kee
 ## Choose the Focused Skill
 
 - DI/bootstrap: `lsr-app-di`
-- routes/localized routes: `lsr-routing`
+- routes/localized routes, generic route metadata and sitemap discovery: `lsr-routing`
 - HTTP/controllers/DTO binding: `lsr-request-flow`
 - migrations: `lsr-db-migrations`
 - DB/ORM/cache: `lsr-db`, `lsr-orm`, `lsr-cache`
