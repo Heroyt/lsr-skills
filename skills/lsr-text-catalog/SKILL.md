@@ -18,7 +18,7 @@ Read the consumer's manifests/locks and actual installed exports before adapting
 - npm README and `package.json`; `src/{types,language}.ts`, `src/{runtime,compiled}/index.ts`, and `src/vite/{index,manifest,transform}.ts`.
 - Consumer compiler entrypoint, source/PO directories, generated output, real facades, Vite root/aliases and typecheck/build scripts.
 
-The packages are independently installed and versioned: Composer `lsr/text-catalog` and npm `@lsr/text-catalog`. Their current manifests are `0.1.0` with independent `v0.1.0` Git tags; artifact format **1** is a separate compatibility contract. Tags and installation instructions do not establish registry publication; verify availability before selecting a registry version.
+The packages are independently installed and versioned: Composer `lsr/text-catalog` and npm `@lsr/text-catalog`. Read each installed manifest for its package version; artifact format **1** is a separate compatibility contract. Tags and installation instructions do not establish registry publication; verify availability before selecting a registry version.
 
 - PHP requires **>=8.5**, `ext-dom`, `ext-libxml`, `nette/neon ^3.4` and `gettext/gettext ^5.7`. Do not reuse the older PHP >=8.4 floor of current LSR core/console packages.
 - Loading/compiling needs no LSR framework, DI container, native gettext extension, Node, Vue or Redis. The native translator alone needs `ext-gettext`.
