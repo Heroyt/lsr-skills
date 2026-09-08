@@ -71,11 +71,14 @@ extensions:
 	routing: Lsr\Core\Routing\DI\RoutingExtension
 	scheduler: Lsr\Scheduler\Di\SchedulerExtension
 	serializer: Lsr\Serializer\DI\SerializerExtensions
+	textCatalog: Lsr\TextCatalog\Di\TextCatalogExtension
 ```
 
 Some packages ship a `vendor/lsr/<package>/services.neon`; others expose only an extension. Include package config when it matches the installed package, otherwise register the extension and services explicitly. Define each extension name once across the complete include graph.
 
 The core `lsr` extension requires valid `appDir` and `tempDir` values. Read `Lsr\Core\DI\LsrExtension::getConfigSchema()` for the installed options.
+
+For optional `lsr/text-catalog` integration, follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md). Its extension takes explicit source/cache/language/frontend paths, source-reference root, domain and locales; it does not obtain them from `lsr.translations` or compile during lookup. `command: true` opts into the compilation command and requires Symfony Console. Keep this configuration in its own NEON include; the standalone package does not require `lsr/core` or a container.
 
 ## Service Registration
 

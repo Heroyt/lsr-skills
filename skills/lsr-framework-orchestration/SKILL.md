@@ -41,7 +41,9 @@ Optional orchestration:
 - `lsr/inertia` — Inertia response/middleware adapter;
 - `lsr/roadrunner` — HTTP/jobs workers and task production;
 - `lsr/scheduler` — Symfony Scheduler integration;
-- `lsr/otel` — OpenTelemetry providers and global SDK ownership, PSR-3 correlation/export, application tracing/metrics, lifecycle adapters, and runtime flush/shutdown handling.
+- `lsr/otel` — OpenTelemetry providers and global SDK ownership, PSR-3 correlation/export, application tracing/metrics, lifecycle adapters, and runtime flush/shutdown handling;
+- `lsr/text-catalog` — standalone NEON source-copy loading/lookup and gettext/artifact compilation, with optional DI/console adapters; PHP 8.5 or newer;
+- `@lsr/text-catalog` — independently installed npm package for typed Vue/gettext facades and runtime/compiled Vite integration; not an LSR core requirement.
 
 Require optional packages only for real application behavior. Do not introduce a package merely because a skill exists.
 
@@ -124,6 +126,7 @@ Jobs and schedules are application services. Make retryable work idempotent, kee
 - jobs/runtime/scheduler: `lsr-async-jobs`, `lsr-roadrunner-runtime`, `lsr-scheduler`
 - Latte/Inertia/Vue: `lsr-latte-stack`, `lsr-inertia-backend`, `lsr-vue-inertia`
 - translations: `lsr-localization`
+- semantic source-copy catalogs and generated PHP/Vue artifacts: [lsr-text-catalog](../lsr-text-catalog/SKILL.md)
 - logging/telemetry: `lsr-logging`, `lsr-observability`
 - review: `lsr-quality-rules`
 

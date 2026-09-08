@@ -1,6 +1,6 @@
 # LSR framework skills
 
-Agent skills for building, maintaining, and reviewing applications based on the independently versioned [LSR framework](https://packages.laserliga.cz) Composer packages.
+Agent skills for building, maintaining, and reviewing applications based on the independently versioned [LSR framework](https://packages.laserliga.cz) Composer packages and optional frontend integrations.
 
 The collection covers framework-wide orchestration plus focused guidance for DI, routing, HTTP, data, authentication, rendering, background processes, localization, and quality review. Skills are installed with the [`skills` CLI](https://www.skills.sh/docs/cli).
 
@@ -100,12 +100,13 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 | [`lsr-inertia-backend`](skills/lsr-inertia-backend/SKILL.md) | `lsr/inertia` middleware/responses, normalized typed props, partial/deferred/merge/once behavior, opt-in V3 SSR with CSR fallback, and Latte head/body outlets. |
 | [`lsr-vue-inertia`](skills/lsr-vue-inertia/SKILL.md) | Optional Vue 3 + TypeScript + Inertia frontend pages, typed props/forms, navigation, layouts, shared state, SSR entrypoints and hydration/fallback. |
 | [`lsr-localization`](skills/lsr-localization/SKILL.md) | Native gettext PO/MO catalogs, plurals/contexts/domains, localized routes/Latte, sitemap hreflang alternatives, and optional `vue3-gettext` parity. |
+| [`lsr-text-catalog`](skills/lsr-text-catalog/SKILL.md) | `lsr/text-catalog` + `@lsr/text-catalog`: canonical NEON source copy, gettext compilation, typed Vue facades, runtime/compiled Vite modes, HTML safety and SSR isolation. |
 
 ## Core principles
 
 The skills intentionally require agents to inspect the application before editing:
 
-- **Installed source is authoritative.** LSR packages are independently versioned; read `composer.lock` and `vendor/lsr/*` before using an interface or DI key.
+- **Installed source is authoritative.** Packages are independently versioned; read `composer.lock`, the frontend lockfile, `vendor/lsr/*` and installed npm exports before using an interface or DI key.
 - **Configuration is modular.** Split DI NEON by concern/domain with `includes:`. Register the project `routes` directory once and keep routes in multiple domain files. Split migration NEON through its own `includes:` tree.
 - **Applications own orchestration.** Bootstrap, package selection, service discovery, migration execution, session storage, queue durability, and deployment remain application decisions.
 - **Long-running workers reuse memory.** Request/auth/tenant/locale/model state must not leak between RoadRunner requests, jobs, or scheduler runs.
@@ -115,6 +116,8 @@ The skills intentionally require agents to inspect the application before editin
 ## Compatibility
 
 The repository tracks the current LSR `0.x` package family and PHP 8.4-era framework source. Because each Composer package releases independently, no skill assumes that all installed packages share one version. Guidance repeatedly points to installed config schemas and source where behavior is version-sensitive.
+
+The optional text-catalog pair has its own requirements: `lsr/text-catalog` starts at PHP 8.5, while `@lsr/text-catalog` has separate Node/Vue/Vite constraints. Do not infer compatibility from an application's older LSR framework version or require the frontend package for PHP-only catalog use.
 
 Distribution intentionally follows rolling `master` for now; tagged releases and a package-version compatibility matrix are not maintained. Run `npx skills update` to receive the latest reviewed guidance.
 

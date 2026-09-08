@@ -92,6 +92,8 @@ Application services remain alive between requests. Therefore:
 
 Database connections can outlive the server's idle timeout even when `isConnected()` is true. For `lsr/db` 0.3.15+, see [the database skill's reconnect contract](../lsr-db/SKILL.md#idle-mysql-connections-in-long-running-processes): `autoReconnect` is an explicit per-connection opt-in, not a RoadRunner setting or lifecycle hook. It checks before package-managed SQL, never replays failed statements, and cannot resume a lost transaction or restore session state. Apply the same policy to jobs workers; queue retries remain a separate idempotency decision.
 
+For optional `lsr/text-catalog` consumers, use [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for catalog and adapter lifetimes. Compile before deployment and reset/restart services when replacing the memoized source definition; request lookup must not rebuild artifacts. `TextTranslator` does not isolate native gettext's process-global locale/domain state: coordinate application locale reset and sanitizer lifetimes for each request/job, and isolate workers if that state cannot be reset safely. The worker's translation-finalization hook is not a text-catalog compiler.
+
 ## Jobs Worker Lifecycle
 
 Current `JobsWorker` clears ORM instances, resolves a DI dispatcher by task name, deserializes payload, invokes it, and acknowledges unless already completed. Exceptions are nacked/logged. Queue acceptance is not processing success.
@@ -123,6 +125,8 @@ Both topologies require:
 - readiness that distinguishes a live Node process from a renderer capable of rendering a real page;
 - default PHP CSR fallback on renderer outage; use strict mode when verifying that SSR actually works;
 - isolation of request/auth/locale/store data in both long-lived PHP and Node processes.
+
+When the renderer uses `@lsr/text-catalog`, create/install a catalog for each Vue app/SSR request, not a shared gettext singleton. Pass the backend-selected locale, match the sanitizer's output policy between SSR and hydration, and release request-owned sanitizer/DOM resources after rendering. See [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for the instance lifecycle; package installation does not supply locale selection or process isolation.
 
 Inspect the installed renderer's endpoints: management routes such as `/shutdown` must never be exposed publicly. Treat rendered head/body as trusted application HTML, not sanitized output from an arbitrary HTTP service. Keep browser session credentials out of renderer transport.
 

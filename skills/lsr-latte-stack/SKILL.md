@@ -47,6 +47,10 @@ Keep custom extensions small:
 - structure-producing syntax belongs in a tag/node only when a function/partial is insufficient;
 - never expose unsafe eval, filesystem, container, or arbitrary-call capabilities to templates.
 
+## Optional Source-Copy Catalogs
+
+For `lsr/text-catalog`, follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md). Inject `TextTranslator` through an application-owned Latte extension or adapter; the package does not autoload global helpers or register Latte functions/tags. Existing core `lang` helpers remain the direct-gettext path, not automatic semantic-key lookup. Keep plain `langText` output under Latte's normal escaping. Only expose HTML output after `langHtmlText` has checked HTML eligibility and the application sanitizer has processed the final translated/interpolated string; source validation alone does not make it safe. Locale/domain setup and sanitizer policy remain application-owned.
+
 ## Layouts and Assets
 
 Follow the application's established layout inheritance and asset integration. LSR core does not require a particular Vite/Nette-assets configuration.

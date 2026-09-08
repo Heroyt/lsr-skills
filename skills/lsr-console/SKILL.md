@@ -76,6 +76,8 @@ scheduler:run
 
 Do not document or call a command just because its package exists; verify it appears in the compiled application.
 
+`texts:cache:compile` is a separate opt-in command from `lsr/text-catalog`, not an LSR core command. Its `TextCatalogExtension` registers `CompileTextCatalogCommand` only with `command: true`; Symfony Console must be available, and `lsr/console` discovers the registered service rather than installing the package or command itself. Standalone consumers can register it with Symfony Console directly. See [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for compiler configuration and generated-artifact ownership; the application still owns the console entrypoint and build invocation.
+
 ## Failure Handling
 
 - Validate all input before state changes.

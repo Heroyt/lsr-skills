@@ -1,11 +1,11 @@
 ---
 name: lsr-localization
-description: Use for LSR internationalization/localization with native gettext, PO/MO catalogs, contexts/plurals/domains, localized routes, sitemap hreflang alternatives and Latte, plus optional vue3-gettext and Inertia locale synchronization.
+description: Use for LSR internationalization/localization with native gettext, PO/MO catalogs, contexts/plurals/domains, localized routes, sitemap hreflang alternatives and Latte, plus optional NEON source-copy catalogs, vue3-gettext and Inertia locale synchronization.
 ---
 
 # LSR Localization with Gettext
 
-LSR's native gettext implementation is the backend authority. For Inertia + Vue 3, prefer `vue3-gettext` as a compatibility layer over the same canonical catalogs; do not create a separate translation system.
+LSR's native gettext implementation is the backend translation authority. For Inertia + Vue 3, use the same gettext translations through `vue3-gettext`; do not create a separate translation system. Applications optionally using `lsr/text-catalog` and `@lsr/text-catalog` should also follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for NEON source ownership, compiler artifacts and injected adapters. Neither package replaces application-owned locale selection.
 
 ## Read the Installed Backend
 
@@ -59,7 +59,7 @@ Latte exposes LSR translation tags/functions/filters through the installed exten
 
 ## Catalog Layout
 
-Use PO files as the translator-edited source of truth:
+Use PO files as the translator-edited source of truth for translations. With the optional text-catalog pipeline, NEON owns canonical source copy and semantic keys; PO owns translated text, not the source definitions:
 
 ```text
 languages/
@@ -68,13 +68,13 @@ languages/
   en_GB/LC_MESSAGES/UI.po
 ```
 
-Commit only PO catalog sources. Native gettext consumes compiled MO files and Vue consumes generated JSON bundles; compile both from PO during the application's Docker/CI build and copy them into the runtime artifact. Never edit or commit generated MO/JSON files.
+For direct-gettext applications, commit PO catalog sources; native gettext consumes compiled MO files and Vue consumes generated JSON bundles. Compile both from PO during the application's Docker/CI build and copy them into the runtime artifact. Never hand-edit generated artifacts. With text-catalog packages, also commit canonical NEON sources and use the package's PHP/gettext/TypeScript/manifest outputs instead of assuming locale JSON is the frontend contract.
 
 Keep system/application UI in gettext. Keep administrator-authored multilingual content in explicit database fields/tables and editing interfaces; it is not a gettext catalog entry.
 
 ## Extraction and Compilation
 
-Own the full update in one deterministic project script:
+For direct-gettext catalogs without the text-catalog packages, own the full update in one deterministic project script:
 
 1. extract PHP/Latte messages;
 2. optionally extract Vue/TypeScript through the installed `vue3-gettext` CLI;
@@ -86,9 +86,11 @@ Own the full update in one deterministic project script:
 
 Expose clear scripts such as `i18n:extract`, `i18n:validate`, and `i18n:compile`; make them idempotent and run validation/compilation in CI.
 
-`Translations` can collect missing messages at runtime when `CHECK_TRANSLATIONS` and Tracy/debug behavior enable it, then write PO/MO/POT through `updateTranslations()`. Treat this as a development bridge, not the preferred deterministic extractor. Never enable catalog mutation in production workers.
+For package-owned catalogs, use `TextCatalogCompiler` instead: it loads NEON, maintains POT/PO with semantic-key contexts, validates translations, and produces MO plus the PHP cache and optional `catalog.ts`, `catalog.compiled.ts`, and format-v1 `catalog.build.json`. Follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for the build contract. Do not extract compiled macros/generated output or independently run the generic PHP/Latte/Vue extractor against package-owned catalogs; keep any remaining direct-gettext catalogs under explicitly separate ownership.
 
-The build must fail when PO validation or MO/JSON compilation fails. Production startup must consume immutable compiled artifacts; it must not compile or mutate catalogs.
+For direct-gettext catalogs, `Translations` can collect missing messages at runtime when `CHECK_TRANSLATIONS` and Tracy/debug behavior enable it, then write PO/MO/POT through `updateTranslations()`. Treat this as a development bridge, not the preferred deterministic extractor or a writer for package-owned catalogs. Never enable catalog mutation in production workers.
+
+The build must fail when catalog validation or compilation fails. Production startup must consume immutable compiled artifacts; it must not compile or mutate catalogs.
 
 ## Locale Representations
 
@@ -106,7 +108,7 @@ Gettext translates messages; it does not format dates/numbers. Centralize `Intl.
 
 ## Optional Vue 3 Compatibility Layer
 
-When the app uses Vue 3/Inertia:
+For direct-gettext applications using Vue 3/Inertia:
 
 - install/configure `vue3-gettext` only in the application frontend;
 - generate one JSON bundle per locale from the canonical PO files;
@@ -114,6 +116,8 @@ When the app uses Vue 3/Inertia:
 - use Composition API `useGettext()` and `$gettext`, `$pgettext`, `$ngettext`, `$npgettext` semantics;
 - keep the frontend entrypoint limited to provider wiring;
 - do not add a second reactive locale source.
+
+With `@lsr/text-catalog`, consume the package-generated catalog instead of creating a separate JSON/gettext provider. Create and install a catalog instance per Vue app and SSR request; synchronize its `gettext.current` from backend-owned locale props. Coordinate SSR/hydration locale and the application sanitizer's policy and resource lifetime as described in [lsr-text-catalog](../lsr-text-catalog/SKILL.md).
 
 The backend owns active locale. Shared Inertia props should include at least:
 
@@ -154,8 +158,7 @@ Use either numeric or string keys, never both:
 - unresolved named placeholders remain unchanged;
 - mixed key modes and non-scalar values throw `InvalidArgumentException`.
 
-Never treat interpolated output as trusted HTML. Add a build-time validator requiring each translation to preserve the
-exact placeholder-name set from its `msgid`/plural forms.
+Never treat interpolated output as trusted HTML. For direct-gettext catalogs, add a build-time validator requiring each translation to preserve the exact placeholder-name set from its `msgid`/plural forms. The text-catalog compiler already validates its translations' placeholders; its HTML adapters additionally require an application sanitizer after translation and interpolation.
 
 ## Localized Routes
 
@@ -176,18 +179,18 @@ Content availability and translated parameter values remain application-owned. F
 
 - Prefer context over unnatural message IDs when one source string has multiple meanings.
 - Use real plural forms; do not concatenate counts with a translated singular.
-- Never use translated `v-html` or assume translators produce safe HTML.
+- Never render raw translated HTML or assume translators produce safe HTML. With text-catalog packages, only render explicit HTML keys through the sanitizer-backed HTML adapter; keep plain strings escaped.
 - Migrate UI incrementally by vertical slice: singular + context + plural + placeholder + formatted value + language switch.
 - Keep source-language fallback and missing-translation behavior explicit.
 - Define whether CI completeness applies globally or only to production locales/features during migration.
 
 ## Verification
 
-- PO extraction/merge is deterministic and idempotent.
-- Every PO validates and compiles to MO and, when the Vue compatibility layer is enabled, locale JSON during the Docker/CI build.
+- The selected extraction/compiler pipeline is deterministic and idempotent; no competing writer modifies package-owned catalogs.
+- Every PO validates and compiles to MO; direct-gettext Vue builds produce locale JSON, while text-catalog builds produce PHP and optional TypeScript/format-v1 manifest artifacts before frontend typechecking/build.
 - PHP and Vue render equivalent singular, contextual, plural, and contextual-plural examples.
 - Named placeholders match and interpolate identically.
-- Backend locale drives route, PHP/Latte, Inertia props, Vue bundle, `<html lang>`, and `Intl` formatting.
+- Backend locale drives route, PHP/Latte, Inertia props, Vue catalog instance/bundle, `<html lang>`, and `Intl` formatting.
 - Two sequential RoadRunner requests with different locales remain isolated.
 - Fuzzy/obsolete/missing entries follow the documented release policy.
 - Localized sitemap URLs and alternate maps agree on available translations, include self/reciprocal links, and match before/after compiled-route cache hydration.
