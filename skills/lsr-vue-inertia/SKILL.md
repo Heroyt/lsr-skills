@@ -83,7 +83,7 @@ For localized applications, Vue's active locale comes from backend-owned Inertia
 
 Use BCP 47 tags such as `cs-CZ` for `Intl` and gettext locale IDs such as `cs_CZ` for catalogs. Centralize their mapping.
 
-When the application opts into `@lsr/text-catalog`, follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for its generated facade and Vite contract. Create/install a catalog per Vue app and SSR request rather than adding a second gettext singleton. Drive that instance's `gettext.current` from the same backend props on navigation. Keep the initial locale and final-output sanitizer policy identical for SSR/hydration, and scope sanitizer resources to the render lifetime. Direct-gettext applications can retain their existing PO-to-JSON workflow.
+When the application opts into `lsr-text-catalog`, follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for its generated facade and Vite contract. Create/install a catalog per Vue app and SSR request rather than adding a second gettext singleton. Drive that instance's `gettext.current` from the same backend props on navigation. Keep the initial locale and final-output sanitizer policy identical for SSR/hydration, and scope sanitizer resources to the render lifetime. Direct-gettext applications can retain their existing PO-to-JSON workflow.
 
 ## Inertia V3 SSR and Hydration
 

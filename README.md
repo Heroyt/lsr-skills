@@ -100,7 +100,7 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 | [`lsr-inertia-backend`](skills/lsr-inertia-backend/SKILL.md) | `lsr/inertia` middleware/responses, normalized typed props, partial/deferred/merge/once behavior, opt-in V3 SSR with CSR fallback, and Latte head/body outlets. |
 | [`lsr-vue-inertia`](skills/lsr-vue-inertia/SKILL.md) | Optional Vue 3 + TypeScript + Inertia frontend pages, typed props/forms, navigation, layouts, shared state, SSR entrypoints and hydration/fallback. |
 | [`lsr-localization`](skills/lsr-localization/SKILL.md) | Native gettext PO/MO catalogs, plurals/contexts/domains, localized routes/Latte, sitemap hreflang alternatives, and optional `vue3-gettext` parity. |
-| [`lsr-text-catalog`](skills/lsr-text-catalog/SKILL.md) | `lsr/text-catalog` + `@lsr/text-catalog`: canonical NEON source copy, gettext compilation, typed Vue facades, runtime/compiled Vite modes, HTML safety and SSR isolation. |
+| [`lsr-text-catalog`](skills/lsr-text-catalog/SKILL.md) | `lsr/text-catalog` + `lsr-text-catalog`: canonical NEON source copy, gettext compilation, typed Vue facades, runtime/compiled Vite modes, HTML safety and SSR isolation. |
 
 ## Core principles
 
@@ -117,7 +117,7 @@ The skills intentionally require agents to inspect the application before editin
 
 The repository tracks the current LSR `0.x` package family and PHP 8.4-era framework source. Because each Composer package releases independently, no skill assumes that all installed packages share one version. Guidance repeatedly points to installed config schemas and source where behavior is version-sensitive.
 
-The optional text-catalog pair has its own requirements: `lsr/text-catalog` starts at PHP 8.5, while `@lsr/text-catalog` has separate Node/Vue/Vite constraints. Do not infer compatibility from an application's older LSR framework version or require the frontend package for PHP-only catalog use.
+The optional text-catalog pair has its own requirements: `lsr/text-catalog` starts at PHP 8.5, while `lsr-text-catalog` has separate Node/Vue/Vite constraints. Do not infer compatibility from an application's older LSR framework version or require the frontend package for PHP-only catalog use.
 
 Distribution intentionally follows rolling `master` for now; tagged releases and a package-version compatibility matrix are not maintained. Run `npx skills update` to receive the latest reviewed guidance.
 

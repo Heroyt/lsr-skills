@@ -126,7 +126,7 @@ Both topologies require:
 - default PHP CSR fallback on renderer outage; use strict mode when verifying that SSR actually works;
 - isolation of request/auth/locale/store data in both long-lived PHP and Node processes.
 
-When the renderer uses `@lsr/text-catalog`, create/install a catalog for each Vue app/SSR request, not a shared gettext singleton. Pass the backend-selected locale, match the sanitizer's output policy between SSR and hydration, and release request-owned sanitizer/DOM resources after rendering. See [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for the instance lifecycle; package installation does not supply locale selection or process isolation.
+When the renderer uses `lsr-text-catalog`, create/install a catalog for each Vue app/SSR request, not a shared gettext singleton. Pass the backend-selected locale, match the sanitizer's output policy between SSR and hydration, and release request-owned sanitizer/DOM resources after rendering. See [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for the instance lifecycle; package installation does not supply locale selection or process isolation.
 
 Inspect the installed renderer's endpoints: management routes such as `/shutdown` must never be exposed publicly. Treat rendered head/body as trusted application HTML, not sanitized output from an arbitrary HTTP service. Keep browser session credentials out of renderer transport.
 

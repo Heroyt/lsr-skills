@@ -1,6 +1,6 @@
 ---
 name: lsr-text-catalog
-description: Use for lsr/text-catalog and @lsr/text-catalog integration, canonical NEON source copy, gettext PO compilation, typed Vue runtime facades, strict compiled Vite macros, artifact validation, HTML safety and app/request isolation.
+description: Use for lsr/text-catalog and lsr-text-catalog integration, canonical NEON source copy, gettext PO compilation, typed Vue runtime facades, strict compiled Vite macros, artifact validation, HTML safety and app/request isolation.
 ---
 
 # LSR Text Catalog
@@ -18,7 +18,7 @@ Read the consumer's manifests/locks and actual installed exports before adapting
 - npm README and `package.json`; `src/{types,language}.ts`, `src/{runtime,compiled}/index.ts`, and `src/vite/{index,manifest,transform}.ts`.
 - Consumer compiler entrypoint, source/PO directories, generated output, real facades, Vite root/aliases and typecheck/build scripts.
 
-The packages are independently installed and versioned: Composer `lsr/text-catalog` and npm `@lsr/text-catalog`. Read each installed manifest for its package version; artifact format **1** is a separate compatibility contract. Tags and installation instructions do not establish registry publication; verify availability before selecting a registry version.
+The packages are independently installed and versioned: Composer `lsr/text-catalog` and npm `lsr-text-catalog`. Read each installed manifest for its package version; artifact format **1** is a separate compatibility contract. Tags and installation instructions do not establish registry publication; verify availability before selecting a registry version.
 
 - PHP requires **>=8.5**, `ext-dom`, `ext-libxml`, `nette/neon ^3.4` and `gettext/gettext ^5.7`. Do not reuse the older PHP >=8.4 floor of current LSR core/console packages.
 - Loading/compiling needs no LSR framework, DI container, native gettext extension, Node, Vue or Redis. The native translator alone needs `ext-gettext`.
@@ -124,13 +124,13 @@ Frontend generation emits ordinary consumer-owned files:
 | `catalog.compiled.ts` | Key unions, locales/translations and declaration-only `text` macro; no runtime source map. |
 | `catalog.build.json` | Format 1 identity, source/HTML/plural snapshot, artifact SHA-256 digests and generation digest. |
 
-Generated types import `@lsr/text-catalog/types`. Keep files resolvable by ordinary TypeScript before Vite starts: **generate before standalone `tsc`/`vue-tsc`**. Do not replace them with Vite-only virtual declarations or invent a globally registered key union.
+Generated types import `lsr-text-catalog/types`. Keep files resolvable by ordinary TypeScript before Vite starts: **generate before standalone `tsc`/`vue-tsc`**. Do not replace them with Vite-only virtual declarations or invent a globally registered key union.
 
 Create a real consumer facade, for example `src/copy.ts`:
 
 ```ts
 import * as generated from '../generated/catalog.js';
-import { createRuntimeCatalog } from '@lsr/text-catalog/runtime';
+import { createRuntimeCatalog } from 'lsr-text-catalog/runtime';
 
 export const {
   text, langText, langTextPlural, langHtmlText, createCatalog, installCatalog,
@@ -183,7 +183,7 @@ Use the same explicit paths, domain and **ordered locale list** as PHP. Paths ar
 import { execFileSync } from 'node:child_process';
 import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vite';
-import { textCatalog } from '@lsr/text-catalog/vite';
+import { textCatalog } from 'lsr-text-catalog/vite';
 
 export default defineConfig({
   plugins: [
@@ -211,7 +211,7 @@ To opt into `mode: 'compiled'`, also set `compiledFacade: 'src/copy.compiled.ts'
 
 ```ts
 import * as generated from '../generated/catalog.compiled.js';
-import { createCompiledCatalog } from '@lsr/text-catalog/compiled';
+import { createCompiledCatalog } from 'lsr-text-catalog/compiled';
 
 export const {
   pgettext, npgettext, htmlPgettext, createCatalog, installCatalog,

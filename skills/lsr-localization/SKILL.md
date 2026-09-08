@@ -5,7 +5,7 @@ description: Use for LSR internationalization/localization with native gettext, 
 
 # LSR Localization with Gettext
 
-LSR's native gettext implementation is the backend translation authority. For Inertia + Vue 3, use the same gettext translations through `vue3-gettext`; do not create a separate translation system. Applications optionally using `lsr/text-catalog` and `@lsr/text-catalog` should also follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for NEON source ownership, compiler artifacts and injected adapters. Neither package replaces application-owned locale selection.
+LSR's native gettext implementation is the backend translation authority. For Inertia + Vue 3, use the same gettext translations through `vue3-gettext`; do not create a separate translation system. Applications optionally using `lsr/text-catalog` and `lsr-text-catalog` should also follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for NEON source ownership, compiler artifacts and injected adapters. Neither package replaces application-owned locale selection.
 
 ## Read the Installed Backend
 
@@ -117,7 +117,7 @@ For direct-gettext applications using Vue 3/Inertia:
 - keep the frontend entrypoint limited to provider wiring;
 - do not add a second reactive locale source.
 
-With `@lsr/text-catalog`, consume the package-generated catalog instead of creating a separate JSON/gettext provider. Create and install a catalog instance per Vue app and SSR request; synchronize its `gettext.current` from backend-owned locale props. Coordinate SSR/hydration locale and the application sanitizer's policy and resource lifetime as described in [lsr-text-catalog](../lsr-text-catalog/SKILL.md).
+With `lsr-text-catalog`, consume the package-generated catalog instead of creating a separate JSON/gettext provider. Create and install a catalog instance per Vue app and SSR request; synchronize its `gettext.current` from backend-owned locale props. Coordinate SSR/hydration locale and the application sanitizer's policy and resource lifetime as described in [lsr-text-catalog](../lsr-text-catalog/SKILL.md).
 
 The backend owns active locale. Shared Inertia props should include at least:
 
