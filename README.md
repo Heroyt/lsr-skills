@@ -66,7 +66,7 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 
 | Skill | Use for |
 | --- | --- |
-| [`lsr-routing`](skills/lsr-routing/SKILL.md) | Modular routes, groups, middleware, attributes, generic metadata, named/localized routes, sitemap discovery and links. |
+| [`lsr-routing`](skills/lsr-routing/SKILL.md) | Modular routes, groups, middleware, domain constraints/aliases since 0.5.0, attributes, metadata, named/localized routes, sitemap discovery and links. |
 | [`lsr-request-flow`](skills/lsr-request-flow/SKILL.md) | Route dispatch, controllers, middleware, action argument/model binding, mapped request DTOs, and responses. |
 | [`lsr-auth-session`](skills/lsr-auth-session/SKILL.md) | `lsr/auth`, user models, login/register/logout, authorization middleware, sessions, and cookies. |
 
@@ -107,7 +107,7 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 The skills intentionally require agents to inspect the application before editing:
 
 - **Installed source is authoritative.** Packages are independently versioned; read `composer.lock`, the frontend lockfile, `vendor/lsr/*` and installed npm exports before using an interface or DI key.
-- **Configuration is modular.** Split DI NEON by concern/domain with `includes:`. Register the project `routes` directory once and keep routes in multiple domain files. Split migration NEON through its own `includes:` tree.
+- **Configuration is modular.** Split DI NEON by concern/domain with `includes:`. Register the project `routes` directory once and keep routes in multiple concern-focused files; hostname constraints are separate. Split migration NEON through its own `includes:` tree.
 - **Applications own orchestration.** Bootstrap, package selection, service discovery, migration execution, session storage, queue durability, and deployment remain application decisions.
 - **Long-running workers reuse memory.** Request/auth/tenant/locale/model state must not leak between RoadRunner requests, jobs, or scheduler runs.
 - **The backend owns locale.** Native gettext, localized routes, Latte, Inertia props, optional `vue3-gettext`, `<html lang>`, and browser `Intl` formatting must stay synchronized.
@@ -116,6 +116,8 @@ The skills intentionally require agents to inspect the application before editin
 ## Compatibility
 
 The repository tracks the current LSR `0.x` package family and PHP 8.4-era framework source. Because each Composer package releases independently, no skill assumes that all installed packages share one version. Guidance repeatedly points to installed config schemas and source where behavior is version-sensitive.
+
+Domain routing is available since **`lsr/routing` 0.5.0**; automatic host dispatch and domain-aware links, redirects and menus require **`lsr/core` 0.5.0+** as well. Core 0.5 requires routing `^0.5`. Existing `^0.3` / `^0.4` constraints do not accept these releases. The routing skill documents deferred aliases, exact-host matching, attribute precedence and compiled cache format 4; upgrade each application deliberately rather than assuming framework-wide version alignment.
 
 The optional text-catalog pair has its own requirements: `lsr/text-catalog` starts at PHP 8.5, while `lsr-text-catalog` has separate Node/Vue/Vite constraints. Do not infer compatibility from an application's older LSR framework version or require the frontend package for PHP-only catalog use.
 

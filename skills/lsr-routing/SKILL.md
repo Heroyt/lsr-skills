@@ -1,6 +1,6 @@
 ---
 name: lsr-routing
-description: Use for LSR route configuration, modular route files, Router and RouteGroup methods, middleware, named and localized routes, generic route metadata, sitemap discovery and hreflang alternatives, parameter validators, controller attributes, route caching, and link generation.
+description: Use for LSR route configuration, modular route files, Router and RouteGroup methods, domain routing and aliases since 0.5.0, middleware, named and localized routes, generic route metadata, sitemap discovery and hreflang alternatives, parameter validators, controller attributes, route caching, and link generation.
 ---
 
 # LSR Routing
@@ -16,6 +16,8 @@ description: Use for LSR route configuration, modular route files, Router and Ro
 - application route DI and every registered route file
 
 Generic route metadata and sitemap discovery described below require `lsr/routing` **0.4.2 or newer**. Check the application's installed package and Composer constraint first; a `^0.3` constraint does not accept these `0.4` releases.
+
+Exact-host domain routing requires **`lsr/routing` 0.5.0+**. Automatic request-host dispatch, domain-aware links, redirects and menus also require **`lsr/core` 0.5.0+**; core 0.5 requires routing `^0.5`. Composer constraints `^0.3` and `^0.4` do not accept `0.5.0`. Do not copy these APIs into an older installation or upgrade separately deployed applications implicitly.
 
 ## Register Route Sources
 
@@ -39,7 +41,7 @@ routing:
 
 Each `routeFiles` value may be a file or directory. For a directory, current `Router` loads every direct `*.php` file with `glob()`; it does not recurse into subdirectories. Controller directories are scanned recursively for route attributes.
 
-## Split Route Files by Domain
+## Split Route Files by Business Concern
 
 Do not put the entire application in `routes/web.php`. Once the `routes` directory is registered, every direct PHP file is loaded automatically. Prefer focused files such as:
 
@@ -95,6 +97,86 @@ Bare strings are case-insensitive middleware-group names, not DI identifiers. Us
 Group definitions append when registered repeatedly. Resolution preserves call order and removes only repeated references to the same middleware object; distinct instances of the same class remain distinct. Middleware groups cannot contain other group names. All referenced groups must exist before route loading finishes.
 
 Resolve dependency-bearing middleware through DI. Prefer service references over serializing service objects into the compiled route cache.
+
+## Domain Routing (Since 0.5.0)
+
+Domain constraints select exact request hosts; they are separate from organizing files by business concern. `Router::domain(string $domain): RouteGroup` creates a group directly:
+
+```php
+$this->domain('public')
+	->get('/', [PublicController::class, 'index'])
+	->name('public.home');
+$this->domain('admin')
+	->get('/', [AdminController::class, 'index'])
+	->name('admin.home');
+
+// May live in a later route file: resolution happens after all sources load.
+$this->declareDomain('www.example.test', alias: 'public');
+$this->declareDomain('admin.example.test', alias: 'admin');
+
+// Unrestricted routes remain eligible on every host.
+$this->get('/health', [HealthController::class, 'show'])->name('health');
+```
+
+On an existing group, `domain()` creates a child with the same prefix and inherited settings. It never changes the active route, earlier routes or siblings. Thus `domain('admin')->group('/api')` and `group('/api')->domain('admin')` both constrain `/api`. Ordinary descendants inherit the domain; another `domain()` child selects its own domain. Keep authentication and authorization middleware explicit: hostname matching is not access control.
+
+### Deferred Aliases and Normalization
+
+- Resolve each reference with one exact-string alias lookup after all route files and controller attributes load. A declared alias becomes its concrete target; any other string is a literal hostname. Do not guess alias intent from dots or reject undeclared strings as missing aliases.
+- Aliases may look like hostnames, and targets are not recursively expanded. Repeating a normalized mapping is allowed before resolution; conflicting targets for one alias fail.
+- Hosts normalize case and one trailing DNS dot. ASCII DNS/punycode, single-label hosts, IPv4 and IPv6 literals are supported. Pass hostnames, not origins: schemes, ports, paths, user information and wildcards are invalid constraints. Convert Unicode names to punycode explicitly.
+- `setup()` / `loadRoutes()` finalize domains after middleware resolution. For manual inline registration, call `$router->resolveDomains()` after all declarations and before host-aware matching, domain-aware links or sitemap discovery. Matching rejects pending domains rather than leaking them into unrestricted routes.
+- Alias declarations freeze after resolution. New routes may use existing aliases; `unregisterAll()` resets route/domain state. Alias and literal declarations resolving to the same host share one tree, so conflicting routes are detected by final host, method and path.
+
+### Matching and Introspection
+
+Custom dispatchers must pass the URI host using the optional fifth argument; existing explicit fourth-argument route trees remain supported:
+
+```php
+use Lsr\Core\Routing\Router;
+use Lsr\Enums\RequestMethod;
+
+$params = [];
+$route = Router::getRoute(
+	RequestMethod::GET,
+	['api', 'jobs'],
+	$params,
+	host: $request->getUri()->getHost(),
+);
+```
+
+- Hostless calls consider only unrestricted routes. Host-aware calls prefer that host's routes, then use unrestricted routes as a per-method fallback. Domain-only paths on other hosts are absent; they do not redirect.
+- HEAD/OPTIONS/405 only consider the selected host and unrestricted trees. A host-specific GET's synthetic HEAD precedes unrestricted HEAD. Explicit OPTIONS handlers precede synthesis; synthetic OPTIONS, including `OPTIONS *`, unions only applicable methods.
+- Names remain globally unique across hosts. Obtain named routes from `getRouteByName()`; fluent HTTP methods on `RouteGroup` return the group, not the route.
+- `availableRoutes` / `getAvailableRoutes()` retain the unrestricted tree shape. Use `getDomainRoutes()` for resolved per-host trees and the optional `Lsr\Core\Routing\Interfaces\DomainRouteInterface::getDomain()` capability for a route's resolved hostname. Existing custom `RouteInterface` implementations need not implement it.
+- Localized variants retain the logical route's domain. Sitemap discovery spans registered domain trees but does not implicitly include/exclude routes; the application still filters hosts and generates absolute sitemap URLs.
+
+### Attributes and Domain-Aware Destinations
+
+`#[Lsr\Core\Routing\Attributes\Domain('admin')]` works on classes and methods. Precedence is route attribute `domain:` argument, then method `#[Domain]`, then class `#[Domain]`:
+
+```php
+use Lsr\Core\Routing\Attributes\Domain;
+use Lsr\Core\Routing\Attributes\Get;
+use Nyholm\Psr7\Response;
+use Psr\Http\Message\ResponseInterface;
+
+#[Domain('admin')]
+class StatusController
+{
+	#[Get('/status', name: 'public.status', domain: 'public')]
+	public function status(): ResponseInterface
+	{
+		return new Response(200, [], 'Public status');
+	}
+}
+```
+
+With core 0.5.0+, use `Generator::route()` / named `getLink()` for named destinations and `getRouteLink()` for route objects. Same-host pretty links remain relative; cross-host links are absolute and retain the current request's scheme and port. Raw path links remain local. Generators use the current request rather than retaining the first host in a long-running worker.
+
+`redirectFrom()` inherits its destination's domain; an explicitly registered redirect alias may instead use a different source domain. Cross-domain alias redirects preserve scheme, port and query. Named menu items use the destination domain for links and active state. The Tracy routing panel shows the request host, selected route domain and separate host trees.
+
+Domain routing does not establish a global host allowlist or trust proxy headers. Configure allowed hosts, trusted proxies, HTTPS and domain-specific ports at the application/web-server boundary.
 
 ## Parameter Binding
 
@@ -226,13 +308,15 @@ Metadata and sitemap attributes apply to every route declared on that method. `S
 
 ## Names and Cache
 
-Name every route used by redirects or links. Duplicate paths or names fail route loading.
+Name every route used by redirects or links. Names are globally unique; conflicting routes fail within their final host, method and path, not merely because another host uses the same path.
 
-`Router::setup()` first loads a valid compiled PHP route artifact. Otherwise it loads route files and controller attributes, resolves middleware groups and service references, and compiles the artifact when `cache.autoCompile` is enabled.
+`Router::setup()` first loads a valid compiled PHP route artifact. Otherwise it loads route files and controller attributes, resolves middleware groups and service references, finalizes domains on 0.5.0+, and compiles the artifact when `cache.autoCompile` is enabled.
 
 The artifact contains the finalized matcher tree and scalar service identifiers. Direct middleware, validators, object handlers, and serializable closures use an object pool for backward compatibility; prefer DI service references for dependency-bearing objects. `cache.checkTimestamps` also tracks route-file and controller-directory membership, but is disabled by default to avoid production filesystem scans.
 
 Generic metadata and sitemap settings are cached separately. Group defaults are flattened into route declarations; unspecified inclusion remains unspecified so the current Router's policy is applied even when reusing a cache compiled under another policy. Localized paths retain their logical family relationship rather than frozen metadata copies. Incompatible cache formats are rejected and route sources are loaded again.
+
+Since routing 0.5.0, compiled format **4** also stores resolved host constraints, per-host trees and aliases. Earlier artifacts are rejected and rebuilt. Warm loading does not rerun declarations: rebuild on every domain mapping change, including environment-derived targets even when source timestamps are unchanged. Keep caches deployment-specific and restart long-running workers after route changes.
 
 Compile or remove the artifact explicitly with:
 
@@ -253,3 +337,5 @@ php bin/console routes:cache:clean
 - Verify `getMeta()` on non-GET and sitemap-excluded routes, shallow inheritance, explicit null values, and late group overrides.
 - Compare live and cached sitemap discovery under both inclusion policies, including named maps and localized variants.
 - Generate application-owned XML and check one URL per available translation, complete reciprocal/self-referencing alternate maps, and fully qualified links.
+- On 0.5.0+, exercise identical paths on two hosts, unknown-host unrestricted fallback, hostless calls, wrong-host misses, per-method fallback, HEAD/OPTIONS/405 isolation and alias/literal collisions after final resolution.
+- Compare cold/warm domain matching and links; verify cross-host redirects and menu active state. Alternate hosts through the same runtime/generator, including same-path controllers with different argument types.

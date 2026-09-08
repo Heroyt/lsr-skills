@@ -5,7 +5,7 @@ description: Use for LSR HTTP request handling, middleware, controller resolutio
 
 # LSR HTTP Request Flow
 
-Use `lsr-routing` for route definitions, route-file splitting, localization, groups, and route caching. This skill starts after a route has been selected.
+Use `lsr-routing` for route definitions, route-file splitting, localization, groups, domain constraints and route caching. This skill covers request-host dispatch and execution of the selected route.
 
 ## Trace the Installed Flow
 
@@ -21,6 +21,8 @@ Read:
 LSR packages are independently versioned. Confirm namespaces from `composer.lock` and installed source rather than copying an old application.
 
 ## Dispatch
+
+Since **`lsr/core` 0.5.0** with **`lsr/routing` 0.5.0+**, `App` passes the current request URI host into route matching. Custom dispatchers must pass `host: $request->getUri()->getHost()` to `Router::getRoute()`; omitting it intentionally considers only unrestricted routes. See `lsr-routing` for deferred aliases and host/method fallback. Configure accepted hosts and trusted proxies at the application/server boundary, not in controller dispatch.
 
 `RouteHandler` processes route middleware in order, resolves `[class, method]` handlers through Nette DI, calls controller `init()` when present, resolves action arguments, invokes the action, and adds queued cookie headers.
 
@@ -49,6 +51,8 @@ Current `RouteHandler` resolves:
 For a model argument `$article`, ID lookup checks the camelCase `articleId`, its lowercase form, the lowercase argument name, then `id`. Use explicit route placeholder names that make this binding obvious.
 
 Missing required models become route model-not-found errors; nullable models may resolve to `null`. Unsupported union/intersection types fail at runtime. Keep action interfaces simple and test exact conversion behavior.
+
+Core **0.5.0+** also injects compatible PSR `RequestInterface` / `ServerRequestInterface` action arguments from the current request. Its handler-argument cache distinguishes resolved domains so same-method/same-path routes on different hosts can use different controller argument types. Exercise both hosts against one warm cache; route selection alone does not prove argument binding is isolated.
 
 ## Request DTOs
 
@@ -95,7 +99,7 @@ FPM creates request state per process/request naturally; RoadRunner reuses the c
 - no request/user/tenant state in static properties or singleton mutable fields;
 - close sessions and release request resources in `finally` paths;
 - clear request-scoped model/cache state using the runtime's lifecycle;
-- test two sequential requests with different users/locales.
+- test sequential requests with different users/locales and, with domain routing since 0.5.0, different hosts; reuse the actual generator and handler cache to verify links, redirects and argument mapping do not retain another host's state.
 
 ## Verification
 
