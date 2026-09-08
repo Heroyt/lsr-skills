@@ -111,7 +111,7 @@ php bin/console config:cache:clean
 php bin/console latte:cache:clean
 ```
 
-`lsr/cache` separately provides `cache:clean`; `lsr/orm` provides `orm:cache:clean`. Do not use broad cache clearing as a substitute for correct configuration or invalidation.
+`lsr/caching` separately provides `cache:clean`; `lsr/orm` provides `orm:cache:clean`. Do not use broad cache clearing as a substitute for correct configuration or invalidation.
 
 ## Verification
 

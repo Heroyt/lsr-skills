@@ -7,11 +7,11 @@ description: Use for LSR cache configuration, Nette cache dependencies, file or 
 
 ## Establish the Storage
 
-Read the installed `lsr/cache` package and application DI before changing behavior:
+Read the installed `lsr/caching` package and application DI before changing behavior:
 
-- `vendor/lsr/cache/src/Cache.php`
-- `vendor/lsr/cache/src/DI/CacheExtension.php`
-- `vendor/lsr/cache/src/Redis/{RedisStorage,RedisJournal}.php`
+- `vendor/lsr/caching/src/Cache.php`
+- `vendor/lsr/caching/src/DI/CacheExtension.php`
+- `vendor/lsr/caching/src/Redis/{RedisStorage,RedisJournal}.php`
 - the application's cache NEON file and Redis services
 
 Do not assume Redis. `CacheExtension` currently defaults to Nette file storage and requires `cacheDir`; Redis is an explicit application service choice.

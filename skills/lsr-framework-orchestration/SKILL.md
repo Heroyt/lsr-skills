@@ -31,7 +31,7 @@ Application core:
 - `lsr/core` — container bootstrap, `App`, request dispatch, controllers, sessions/cookies, Latte, links, translations, migration loading;
 - `lsr/routing` — router, groups, middleware, localized routes, route attributes/cache;
 - `lsr/request` — PSR request/response factories, mapped request validation, response DTOs;
-- `lsr/cache`, `lsr/db`, `lsr/serializer`, `lsr/object-validation`, `lsr/orm` — persistence/data stack.
+- `lsr/caching`, `lsr/db`, `lsr/serializer`, `lsr/object-validation`, `lsr/orm` — persistence/data stack.
 
 Optional orchestration:
 
