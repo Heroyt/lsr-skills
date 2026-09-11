@@ -97,14 +97,16 @@ orm:
 
 The named loggers/storage come from the earlier logging example. The database fragment supplements existing connection definitions, including a required `main` connection. Register each package extension once.
 
-- Core exposes `<extension>.logger` and keeps `App::getLogger(): Lsr\Logging\Logger`; select a concrete LSR logger in this patch phase.
+- Core exposes `<extension>.logger`. Published 0.5.1 keeps `App::getLogger(): Lsr\Logging\Logger`; **0.6 (unreleased)** changes its getter, setter and protected property to `Psr\Log\LoggerInterface`, admitting ordinary PSR implementations without a wrapper. The concrete default is unchanged.
 - DB accepts PSR-3 loggers. A connection-specific reference overrides the package reference; omitted references preserve the legacy `LOG_DIR`/`db` destination. Its Dibi-event adapter belongs to `lsr/db`, not the selected logging implementation.
 - RoadRunner accepts PSR-3 loggers. A purpose-specific reference overrides the common reference; omitted settings preserve HTTP `worker` and jobs `worker-jobs` destinations. Custom worker replacement constructors must remain compatible with application DI alterations.
-- ORM exposes `<extension>.loggerProvider` for per-model concrete LSR loggers, not a single autowired global logger. Choose base storage or a custom provider through `orm.logging`; see [lsr-orm](../lsr-orm/SKILL.md). Generic PSR-only model loggers belong to a later incompatible contract change.
+- ORM exposes `<extension>.loggerProvider`, not a single autowired global logger. Published 0.3.25 requires concrete LSR results; **0.4 (unreleased)** widens the provider/getters/protected property to `Psr\Log\LoggerInterface`. Choose base storage or a custom provider through `orm.logging`; see [lsr-orm](../lsr-orm/SKILL.md). The built-in provider still returns concrete per-model LSR loggers.
 - Package logger definitions do not participate in global type autowiring. Merely changing `@logger` does not redirect the legacy package defaults; choose references explicitly.
 - Separate named loggers may share a storage stack while retaining identity. Selecting the same logger reference instead shares the exact instance and its logger name.
 
 `Logger::exception()` and `Logger::logDb()` remain available to applications. DB uses its own PSR-3 Dibi adapter; worker/ORM internal exception reporting uses PSR-3 calls with the legacy error/debug records preserved. Do not consolidate records, remove public helpers, widen Core/ORM concrete getter contracts, or remove default logging dependencies as part of the compatible patches.
+
+The unreleased Core 0.6 / ORM 0.4 contracts are deliberate minor migrations, not backports into the compatible patches. Before adoption, migrate concrete helper calls through generic getters and invariant protected-property redeclarations; see the package READMEs. Preserve the existing exception error/debug pair, including its message prefix and empty contexts, rather than replacing it with one structured error. Logger helpers and default `lsr/logging ^0.3` dependencies remain intact. Check the [cross-package compatibility set](../../README.md#unreleased-psr-logger-compatibility-set) before a Composer path install.
 
 Validate both legacy defaults and configured paths. Exercise real failed queries and worker/model error reporting, not only logger service resolution. Pure packages without log-producing behavior do not acquire an unused logger dependency.
 

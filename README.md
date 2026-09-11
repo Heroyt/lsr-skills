@@ -127,7 +127,30 @@ Named logger DI, recursive storage stacks, per-destination filtering and PSR-20 
 
 Package-owned logger configuration is available since **Core 0.5.1, DB 0.3.17, ORM 0.3.25 and RoadRunner 0.1.16**. Check installed versions before using it. These compatible patches preserve concrete Core/ORM logger contracts, while DB/workers accept PSR-3 implementations. ORM's configurable base storage requires logging `^0.3.2`; default output and public logging helpers are retained. Generic PSR-only Core/ORM contracts remain a later minor-release migration. Application dependencies are not updated by this repository.
 
-Distribution intentionally follows rolling `master` for now; tagged releases and a package-version compatibility matrix are not maintained. Run `npx skills update` to receive the latest reviewed guidance.
+### Unreleased PSR logger compatibility set
+
+The `feat/psr-logger-contracts` branches prepare the following **unreleased** versions. They are not Satis releases or version tags. Core 0.6 and ORM 0.4 expose PSR-3 logger contracts; the companion changes admit those versions without dropping their existing supported ranges.
+
+| Package | Development version | Compatibility change |
+| --- | --- | --- |
+| `lsr/core` | `0.6.0-dev` | PSR getter/setter/protected property; supports ORM 0.3 and 0.4 |
+| `lsr/orm` | `0.4.0-dev` | PSR provider/getters/protected property; concrete default provider retained |
+| `lsr/roadrunner` | `0.1.17-dev` | Admit Core `^0.6` and ORM `^0.4` |
+| `lsr/cqrs` | `0.1.7-dev` | Admit Core `^0.6` |
+| `lsr/auth` | `0.3.13-dev` | Admit ORM `^0.4`; Core `^0.6` in development |
+| `lsr/otel` | `0.1.7-dev` | Admit Core `^0.6` / ORM `^0.4` in development; runtime bridges remain optional |
+| `lsr/laser-liga-api` | `0.1.7-dev` | Admit ORM `^0.4` |
+| `lsr/lg-result-parsing` | `0.1.6-dev` | Admit ORM `^0.4` |
+
+For local testing, use explicit Composer `path` repositories with `options.symlink: true` for the packages being tested, and opt into their development versions explicitly. API client and parser live in `Libraries/LaserLigaApiClient` and `Libraries/LsrResultParsing`; the other PHP packages live under `Libraries/lsr-packages`. A path repository does not override incompatible root constraints. Include companion working trees where an installed consumer's old range would otherwise block the new Core or ORM; do not fake an old version alias or disable platform checks.
+
+Core 0.6 can also use published ORM 0.3: adopting the Core logger contract does not force the model logger migration. Published Core 0.5 remains constrained to ORM 0.3 and must not be combined with ORM 0.4 by bypassing Composer. `lsr/logging` stays on its compatible 0.3 line, with `exception()` and `logDb()` intact.
+
+Core and ORM allow `psr/log` 1.x, 2.x and 3.x individually. The complete RoadRunner set requires 2.x or 3.x through `spiral/roadrunner-worker`; do not bypass that upstream constraint. This development set was smoke-tested with real LSR and Monolog loggers on both `psr/log` 2.x and 3.x.
+
+Each application must deliberately update its own constraints, migrate helper calls through generic Core/model getters and invariant inherited logger properties, then rebuild DI caches and restart workers. Existing Core `^0.3` application/module constraints do not accept Core 0.6. Keep application deployments independent and restore temporary path repositories before a later published-package installation.
+
+Published skills follow rolling `master`; tagged skill releases are not maintained. This feature branch also documents the unreleased compatibility set above. Run `npx skills update` to receive the latest guidance from the branch you installed.
 
 The skills themselves contain Markdown instructions only and do not install PHP or frontend dependencies.
 

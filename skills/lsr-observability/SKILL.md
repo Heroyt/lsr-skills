@@ -124,6 +124,8 @@ services:
 
 Since Core **0.5.1**, DB **0.3.17**, RoadRunner **0.1.16** and ORM **0.3.25**, use [package-owned logger selection](../lsr-logging/SKILL.md#package-owned-logger-selection) to route Core/DB/worker internals into selected DI logger services. Old package versions still construct private loggers and bypass this discovery. ORM provider-created model loggers remain dynamic: include `@otel.logging.storage` explicitly in their base storage stack. A generic PSR-3 logger selected for DB/workers is not an LSR `Logger` and needs its own export integration; automatic LSR storage attachment does not configure Monolog handlers.
 
+The same limitation applies to arbitrary PSR loggers selected by **Core 0.6 / ORM 0.4 (unreleased)**. Shared aliases retain their selected logger identity; selecting a PSR service does not make it an LSR storage target. `@otel.logging.logger` implements the OpenTelemetry Logs API, not PSR-3, and is not a valid Core logger reference.
+
 ### Exported Record Contract
 
 - The body preserves the message, severity maps to OTEL numbers/text, and the active span supplies trace/span correlation.
