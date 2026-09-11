@@ -78,6 +78,8 @@ Some packages ship a `vendor/lsr/<package>/services.neon`; others expose only an
 
 The core `lsr` extension requires valid `appDir` and `tempDir` values. Read `Lsr\Core\DI\LsrExtension::getConfigSchema()` for the installed options.
 
+For the unreleased compatible logger patches, inspect the installed schemas before using Core's `lsr.logger`, DB's package/per-connection logger selection, RoadRunner's common/per-worker selections, or ORM's model logger provider. Follow [lsr-logging](../lsr-logging/SKILL.md#package-owned-logger-selection). These selections consume explicitly named services without adding competing globally autowired loggers. Core/ORM still require concrete LSR loggers in this phase; DB/workers can consume PSR-3 implementations. Keep existing `services.neon` wrapper registration singular.
+
 For optional `lsr/text-catalog` integration, follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md). Its extension takes explicit source/cache/language/frontend paths, source-reference root, domain and locales; it does not obtain them from `lsr.translations` or compile during lookup. `command: true` opts into the compilation command and requires Symfony Console. Keep this configuration in its own NEON include; the standalone package does not require `lsr/core` or a container.
 
 ## Service Registration

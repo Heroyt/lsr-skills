@@ -40,6 +40,23 @@ roadrunner:
 
 Read the installed schema and generated service names before copying this shape. The default worker map keys follow RoadRunner environment modes.
 
+### Worker Loggers
+
+The compatible worker logger configuration is currently an **unreleased patch**. Inspect the installed `RoadrunnerExtension` and worker classes; published older workers construct private loggers and cannot consume these settings.
+
+```neon
+# Add to existing RoadRunner configuration.
+roadrunner:
+    logger: @logging.loggers.app
+    loggers:
+        http: @logging.loggers.app
+        jobs: @logging.loggers.imports
+```
+
+Each purpose-specific reference overrides the common logger; absent overrides retain `LOG_DIR` destinations `worker` and `worker-jobs`. Services `<extension>.logger.http` and `<extension>.logger.jobs` are non-autowired globally; there is no common `<extension>.logger` service. Select an LSR named logger from [lsr-logging](../lsr-logging/SKILL.md) or any `Psr\Log\LoggerInterface` implementation. The built-in error paths use standard error/debug calls, not an implementation-specific `exception()` method, while preserving existing record order/content.
+
+Both built-in workers expose `setLogger(Psr\Log\LoggerInterface): static`; constructor signatures remain unchanged. The extension applies the setter after worker service overrides to built-ins and their subclasses, including separately named selected workers. Unrelated custom `Worker` implementations do not receive this setter. For standalone workers, call `setLogger()` explicitly. Preserve existing Tracy/stderr reporting and error/nack semantics. A selected logger does not automatically replace those separate reporting paths, and logging exceptions must not be silently swallowed by a new wrapper. Native lazy defaults require Nette DI `^3.2.4`.
+
 ## Worker Entrypoint
 
 The application owns a small entrypoint:

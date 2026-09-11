@@ -1,6 +1,6 @@
 ---
 name: lsr-db
-description: Use for LSR database setup and access with Lsr\Db\Connection, the DB facade, dibi fluent queries, typed DTO fetches, caching, named connections, transactions, and opt-in MySQL reconnects in long-running workers.
+description: Use for LSR database setup and access with Lsr\Db\Connection, the DB facade, dibi queries, configurable PSR-3 logging, typed DTO fetches, caching, named connections, transactions, and opt-in MySQL reconnects.
 ---
 
 # LSR Database
@@ -27,6 +27,25 @@ Keep this in the application bootstrap, not in request handlers. Named connectio
 `Connection` accepts a configuration array. Current options include `driver`, host/port/database credentials, `dsn`, `pdoDriver`, `options`, `prefix`, `lazy`, `strictSelectForUpdate`, and (since `lsr/db` 0.3.15) `autoReconnect`. Treat credentials as private runtime configuration.
 
 Use an explicit PDO driver/DSN for non-MySQL databases. Read `Connection::normalizeConfig()` in the installed package rather than guessing DSN behavior.
+
+## Package Logger Selection
+
+The configurable logger integration is an **unreleased compatible patch**. Check the installed `DbExtension` schema and `Connection`/`DB` signatures; use an explicit Composer path install for unpublished code rather than assuming the published package already contains it.
+
+```neon
+# Supplement existing connection definitions.
+db:
+    logger: @logging.loggers.app
+    connections:
+        reporting:
+            logger: @logging.loggers.imports
+```
+
+The named logger services are configured through [lsr-logging](../lsr-logging/SKILL.md), or may be any other PSR-3 implementation. Connection-level selection takes precedence over the package-level logger. Omitted settings preserve the lazy `LOG_DIR`/`db` file logger; an unrelated global autowired logger does not replace that default. Logger references are DI configuration, not driver options.
+
+`Lsr\Db\Logging\DibiEventLogger` translates Dibi failures into PSR-3 records. It preserves the existing error summary and optional SQL debug record, not a new stream of successful queries. SQL can contain secrets; select an appropriate destination/filter and avoid production debug collection of sensitive queries. Synchronous logging failures keep their existing propagation behavior.
+
+The logging package's `Logger::logDb()` remains an application compatibility helper, but DB internals no longer require it. Use the optional logger argument shown by the installed `Connection`/factory signatures for standalone construction; do not change existing positional arguments. Test actual SQL failures against a disposable database with both the default logger and a non-LSR PSR logger.
 
 ## Idle MySQL Connections in Long-Running Processes
 

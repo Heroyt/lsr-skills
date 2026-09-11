@@ -1,6 +1,6 @@
 ---
 name: lsr-orm
-description: Use for LSR ORM models, model configuration, primary keys, typed properties, querying, persistence, relations, opt-in owned locale-keyed content translations since 0.3.23, serialization, validation, and model cache behavior.
+description: Use for LSR ORM models, configurable per-model logger providers, model configuration, primary keys, typed properties, querying, persistence, relations, owned locale-keyed content translations, serialization, validation, and model cache behavior.
 ---
 
 # LSR ORM
@@ -173,6 +173,29 @@ foreach ($products as $product) {
 - Exact and batched translation reads bypass persistent DB query caches (`fetchAll(cache: false)`); collections cache hits/misses only in process memory. Child ORM insert/update/delete invalidates lookup state, including misses; moving a persisted child to another parent/locale invalidates both old and new lookups. Parent deletion invalidates owned child state.
 - `ModelRepository::clearInstances()` clears translation lookup caches even in externally retained collections, but does not refresh the fields of retained child objects. Clear at request/job boundaries and refetch rather than retaining models across lifecycles.
 - Raw/bulk SQL and external writers bypass ORM mutation invalidation. Explicitly clear in-process instance/translation state and refetch; no cross-process freshness is promised. Separately cached ordinary `Model::query()` results keep their existing application invalidation contract. Preloaded parent queries respect normal `get()`/`first()` caching; child reads always bypass DB caching.
+
+## Per-Model Logging
+
+The configurable model logger provider is an **unreleased compatible patch**. Check the installed `ModelRepository`, `Logging/ModelLoggerProviderInterface.php`, and `OrmExtension` before using it. The storage-aware implementation requires `lsr/logging:^0.3.2`; stacks and OTEL record identity require the newer logging/OTEL versions documented in [lsr-logging](../lsr-logging/SKILL.md).
+
+```neon
+# Add to an already registered ORM extension and logging storage graph.
+orm:
+    logging:
+        storage: @logging.storages.stack
+        directory: '%constants.appDir%logs/models'
+```
+
+The extension exposes `<extension>.loggerProvider` and installs it into `ModelRepository` during container initialization. Initialize the container before acquiring model loggers. Without configuration or DI, models retain the existing per-table daily files under `LOG_DIR . 'models/'`; an unrelated globally autowired logger does not override them.
+
+- The patch provider contract is `Lsr\Orm\Logging\ModelLoggerProviderInterface::getLogger(string $modelClass): Lsr\Logging\Logger`, with a `class-string<Model>` input. Public model `getLogger()` and its concrete logger property remain compatible with application `exception()` calls. Do not substitute a PSR-only logger here; that requires a later incompatible contract change.
+- `LsrModelLoggerProvider` creates model-specific loggers. A selected base storage/stack is shared while model identity is retained; shared storage does not imply separate physical files. Configured storage records carry `lsr.orm.model` and `lsr.orm.table` context, while default legacy record content stays unchanged.
+- Use `orm.logging.provider: @applicationModelLoggerProvider` for custom routing, including a provider returning one existing shared LSR logger. Do not combine a custom provider with `storage` or `directory`; those configure the built-in provider.
+- The repository owns its per-model-class cache. Keep provider selection stable during normal request/job processing; clearing model instances is separate from clearing logger selections. Already acquired model logger references retain their existing lifetime, so do not change provider policy after handing models/loggers to consumers and expect those references to be rewritten.
+- Model loggers are created dynamically, not as individual DI definitions. OTEL `autoWire` does not discover them. Put `@otel.logging.storage` explicitly in the selected base stack, with destination-specific filters as required.
+- Internal model error reporting uses PSR-3 error/debug calls while preserving legacy records. It does not remove the application's helper methods or merge DB and ORM reports of the same failure.
+
+Verify per-model output, shared storage identity, custom provider selection, logger cache clearing, normal container initialization and explicit OTEL export. No model instances, request objects or mutable tenant state should be captured in a long-lived provider.
 
 ## Long-Running Workers
 

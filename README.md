@@ -59,7 +59,7 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 | Skill | Use for |
 | --- | --- |
 | [`lsr-framework-orchestration`](skills/lsr-framework-orchestration/SKILL.md) | Package ownership, bootstrap order, end-to-end HTTP/background flow, and cross-package changes. |
-| [`lsr-app-di`](skills/lsr-app-di/SKILL.md) | `App::setupDi()`, Nette extensions/services, modular NEON includes, and container debugging. |
+| [`lsr-app-di`](skills/lsr-app-di/SKILL.md) | `App::setupDi()`, Nette extensions/services, package logger selection, modular NEON includes, and container debugging. |
 | [`lsr-quality-rules`](skills/lsr-quality-rules/SKILL.md) | Evidence-based LSR review across configuration, interfaces, security, persistence, cache, and long-running state. |
 
 ### HTTP and routing
@@ -74,9 +74,9 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 
 | Skill | Use for |
 | --- | --- |
-| [`lsr-db`](skills/lsr-db/SKILL.md) | Connection/bootstrap, the DB facade, dibi fluent queries, typed DTO fetches, caching, transactions, and opt-in idle MySQL reconnects. |
+| [`lsr-db`](skills/lsr-db/SKILL.md) | Connection/bootstrap, configurable PSR-3 logging and Dibi event translation, the DB facade, fluent queries, DTOs, caching, transactions, and opt-in idle MySQL reconnects. |
 | [`lsr-db-migrations`](skills/lsr-db-migrations/SKILL.md) | Domain-split migration includes, definitions/modifications, indexes, foreign keys, views, and installer verification. |
-| [`lsr-orm`](skills/lsr-orm/SKILL.md) | Models, primary keys, properties, queries, persistence, relations, owned locale-keyed content translations since 0.3.23, model cache, and schema alignment. |
+| [`lsr-orm`](skills/lsr-orm/SKILL.md) | Models, per-model logger providers and shared storage, properties, relations, owned locale-keyed content translations since 0.3.23, caching, and schema alignment. |
 | [`lsr-cache`](skills/lsr-cache/SKILL.md) | File/Redis cache configuration, namespaces, dependencies, tags, invalidation, and commands. |
 | [`lsr-serializer-validation`](skills/lsr-serializer-validation/SKILL.md) | Symfony serializer integration, mapping, typed DTOs, validation attributes, request mapping, and DB DTO fetches. |
 
@@ -88,7 +88,7 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 | [`lsr-console`](skills/lsr-console/SKILL.md) | Symfony Console DI discovery, `AsCommand`, lazy commands, maintenance commands, and CLI behavior. |
 | [`lsr-scheduler`](skills/lsr-scheduler/SKILL.md) | `SchedulerJobInterface`, cron/periodic triggers, scheduled commands, diagnostics, shared state/locks, and supervision. |
 | [`lsr-async-jobs`](skills/lsr-async-jobs/SKILL.md) | RoadRunner task payloads/dispatchers, `TaskProducer`, serializers, acknowledgement, retries, and async CQRS. |
-| [`lsr-roadrunner-runtime`](skills/lsr-roadrunner-runtime/SKILL.md) | DI + `.rr.yaml`, HTTP/jobs workers, RPC/queues, process supervision, optional same/separate-container SSR Node services, and long-running isolation. |
+| [`lsr-roadrunner-runtime`](skills/lsr-roadrunner-runtime/SKILL.md) | DI + `.rr.yaml`, configurable PSR-3 worker loggers, HTTP/jobs workers, RPC/queues, supervision, optional SSR Node services, and long-running isolation. |
 | [`lsr-logging`](skills/lsr-logging/SKILL.md) | `LoggerExtension`, named loggers, recursive storage stacks, destination filtering/redaction, PSR-20 clocks, formatting, and worker lifetime. |
 | [`lsr-observability`](skills/lsr-observability/SKILL.md) | `lsr/otel` DI, explicit log storage and opt-in auto-wiring, global SDK ownership, PSR-3 correlation/export, tracing/metrics, OTLP export, and worker flushing. |
 
@@ -124,6 +124,8 @@ The optional text-catalog pair has its own requirements: `lsr/text-catalog` star
 Owned database content translations require installed **`lsr/orm` 0.3.23+**: older versions lack `Translations`, `TranslationCollection` and `withTranslations()`. This opt-in relation does not change ordinary relations or migrate application schemas. The [ORM skill](skills/lsr-orm/SKILL.md#owned-locale-keyed-content-0323) covers explicit locale keys, exact editing versus whole-row fallback, schema ownership, batch reads and lifecycle-scoped cache invalidation; UI gettext/NEON catalogs remain separate. Check each application's lock file and installed source before adoption; these instructions do not establish publication or update dependencies.
 
 Named logger DI, recursive storage stacks, per-destination filtering and PSR-20 clocks require **`lsr/logging` 0.3.4+**; `LoggerExtension` and its `services.neon` compatibility wrapper require Nette DI `^3.2`. Explicit OTEL storage and opt-in automatic Logger attachment require **`lsr/otel` 0.1.6+** with that logging API. These exports do not need `ext-opentelemetry` or global SDK registration; do not combine them with PSR-3 hook export. Existing default file output is preserved. See the logging and observability skills before updating each application's dependencies.
+
+The package-owned logger configuration described in these skills is an **unreleased compatible patch set** for Core, DB, ORM and RoadRunner. Verify installed schemas or use explicit Composer path installations; it has not been made available by a version tag or Satis publication. Core/ORM preserve concrete LSR logger contracts, while DB/workers accept PSR-3 implementations. ORM's configurable base storage requires logging `^0.3.2`; default output and public logging helpers are retained. Generic PSR-only Core/ORM contracts remain a later minor-release migration. Application dependencies are not updated by this repository.
 
 Distribution intentionally follows rolling `master` for now; tagged releases and a package-version compatibility matrix are not maintained. Run `npx skills update` to receive the latest reviewed guidance.
 
