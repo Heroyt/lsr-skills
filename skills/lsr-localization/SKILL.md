@@ -1,11 +1,11 @@
 ---
 name: lsr-localization
-description: Use for LSR internationalization/localization with native gettext, PO/MO catalogs, contexts/plurals/domains, localized routes, sitemap hreflang alternatives and Latte, plus optional NEON source-copy catalogs, vue3-gettext and Inertia locale synchronization.
+description: Use for LSR internationalization/localization with native gettext, PO/MO catalogs, contexts/plurals/domains, localized routes, sitemap hreflang alternatives and Latte, plus optional NEON source-copy catalogs, vue3-gettext, Inertia locale synchronization, and the boundary with ORM-owned multilingual content.
 ---
 
 # LSR Localization with Gettext
 
-LSR's native gettext implementation is the backend translation authority. For Inertia + Vue 3, use the same gettext translations through `vue3-gettext`; do not create a separate translation system. Applications optionally using `lsr/text-catalog` and `lsr-text-catalog` should also follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for NEON source ownership, compiler artifacts and injected adapters. Neither package replaces application-owned locale selection.
+LSR's native gettext implementation is the backend UI-message translation authority. For Inertia + Vue 3, use the same gettext translations through `vue3-gettext`; do not create a separate UI translation system. Applications optionally using `lsr/text-catalog` and `lsr-text-catalog` should also follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for NEON source ownership, compiler artifacts and injected adapters. Neither package replaces application-owned locale selection. Database-backed multilingual content is a separate responsibility; see [ORM-owned content](#database-backed-multilingual-content).
 
 ## Read the Installed Backend
 
@@ -71,6 +71,17 @@ languages/
 For direct-gettext applications, commit PO catalog sources; native gettext consumes compiled MO files and Vue consumes generated JSON bundles. Compile both from PO during the application's Docker/CI build and copy them into the runtime artifact. Never hand-edit generated artifacts. With text-catalog packages, also commit canonical NEON sources and use the package's PHP/gettext/TypeScript/manifest outputs instead of assuming locale JSON is the frontend contract.
 
 Keep system/application UI in gettext. Keep administrator-authored multilingual content in explicit database fields/tables and editing interfaces; it is not a gettext catalog entry.
+
+### Database-Backed Multilingual Content
+
+For administrator/user-authored content, `lsr/orm` **0.3.23+** offers the opt-in `#[Translations]` relation and `TranslationCollection<T>`. Follow [lsr-orm](../lsr-orm/SKILL.md#owned-locale-keyed-content-0323) for complete ordinary parent/child declarations, migration constraints, exact writes, whole-row fallback, batch loading and cache lifecycle. Older installed ORM versions do not have this feature: inspect the application's lock file and installed source before adopting it. Updating a skill does not migrate an application or publish/install a package.
+
+- Store source/default-language content as a row alongside other locales, not in gettext/PO or NEON UI source catalogs.
+- Select supported locale keys and fallback order in the application. The collection never reads the active gettext, route or Inertia locale, nor normalizes case, whitespace or underscore/hyphen spellings. Map representations explicitly and keep SQL collation/uniqueness consistent with exact stored keys.
+- Use `find($locale)` for an exact row or `null`; `resolve([$requested, $default])` selects the first existing whole row without per-field fallback. Preserve the actual returned row's locale in output.
+- Editing must use exact lookup and explicit child save. A resolved fallback is a real writable row; saving it would edit the fallback language. `create()` makes an unsaved child and requires a persisted parent; saving the parent never saves translations.
+- Batch known locales with `withTranslations()` rather than causing one lookup per parent. Translation relations are omitted by default from `Model::jsonSerialize()` even when loaded; expose intentional DTO fields.
+- Locale switching does not itself refresh content state. ORM mutation invalidation is in-process, and raw/external writers require explicit cache/instance lifecycle management; do not retain content models across requests/jobs.
 
 ## Extraction and Compilation
 

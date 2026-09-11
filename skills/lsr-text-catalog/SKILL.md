@@ -9,6 +9,8 @@ Use this skill when adding or changing semantic copy keys, compiling NEON/gettex
 
 This is a source-copy and compilation seam, not a replacement for application-owned locale selection. Use [localization](../lsr-localization/SKILL.md) for native gettext setup, PO/MO conventions, locale mappings, routes and language switching; [Vue/Inertia](../lsr-vue-inertia/SKILL.md) for the optional frontend/SSR application lifecycle.
 
+Database-backed administrator/user-authored content is not UI source copy. For that separate use case, see [ORM-owned content translations](../lsr-orm/SKILL.md#owned-locale-keyed-content-0323), available only with installed `lsr/orm` 0.3.23+. Its source/default locale is an ordinary database row, not a generated NEON/gettext source entry; keep content editing and persistence out of the catalog compiler.
+
 ## Establish the Installed Contract
 
 Read the consumer's manifests/locks and actual installed exports before adapting examples:

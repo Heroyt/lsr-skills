@@ -76,7 +76,7 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 | --- | --- |
 | [`lsr-db`](skills/lsr-db/SKILL.md) | Connection/bootstrap, the DB facade, dibi fluent queries, typed DTO fetches, caching, transactions, and opt-in idle MySQL reconnects. |
 | [`lsr-db-migrations`](skills/lsr-db-migrations/SKILL.md) | Domain-split migration includes, definitions/modifications, indexes, foreign keys, views, and installer verification. |
-| [`lsr-orm`](skills/lsr-orm/SKILL.md) | Models, primary keys, properties, queries, persistence, relations, model cache, and schema alignment. |
+| [`lsr-orm`](skills/lsr-orm/SKILL.md) | Models, primary keys, properties, queries, persistence, relations, owned locale-keyed content translations since 0.3.23, model cache, and schema alignment. |
 | [`lsr-cache`](skills/lsr-cache/SKILL.md) | File/Redis cache configuration, namespaces, dependencies, tags, invalidation, and commands. |
 | [`lsr-serializer-validation`](skills/lsr-serializer-validation/SKILL.md) | Symfony serializer integration, mapping, typed DTOs, validation attributes, request mapping, and DB DTO fetches. |
 
@@ -99,7 +99,7 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 | [`lsr-latte-stack`](skills/lsr-latte-stack/SKILL.md) | Server-rendered Latte, typed parameters, LSR tags/functions, extensions, assets, and sandbox rendering. |
 | [`lsr-inertia-backend`](skills/lsr-inertia-backend/SKILL.md) | `lsr/inertia` middleware/responses, normalized typed props, partial/deferred/merge/once behavior, opt-in V3 SSR with CSR fallback, and Latte head/body outlets. |
 | [`lsr-vue-inertia`](skills/lsr-vue-inertia/SKILL.md) | Optional Vue 3 + TypeScript + Inertia frontend pages, typed props/forms, navigation, layouts, shared state, SSR entrypoints and hydration/fallback. |
-| [`lsr-localization`](skills/lsr-localization/SKILL.md) | Native gettext PO/MO catalogs, plurals/contexts/domains, localized routes/Latte, sitemap hreflang alternatives, and optional `vue3-gettext` parity. |
+| [`lsr-localization`](skills/lsr-localization/SKILL.md) | Native gettext PO/MO catalogs, plurals/contexts/domains, localized routes/Latte, sitemap hreflang alternatives, optional `vue3-gettext` parity, and separation from database-backed multilingual content. |
 | [`lsr-text-catalog`](skills/lsr-text-catalog/SKILL.md) | `lsr/text-catalog` + `lsr-text-catalog`: canonical NEON source copy, gettext compilation, typed Vue facades, runtime/compiled Vite modes, HTML safety and SSR isolation. |
 
 ## Core principles
@@ -120,6 +120,8 @@ The repository tracks the current LSR `0.x` package family and PHP 8.4-era frame
 Domain routing is available since **`lsr/routing` 0.5.0**; automatic host dispatch and domain-aware links, redirects and menus require **`lsr/core` 0.5.0+** as well. Core 0.5 requires routing `^0.5`. Existing `^0.3` / `^0.4` constraints do not accept these releases. The routing skill documents deferred aliases, exact-host matching, attribute precedence and compiled cache format 4; upgrade each application deliberately rather than assuming framework-wide version alignment.
 
 The optional text-catalog pair has its own requirements: `lsr/text-catalog` starts at PHP 8.5, while `lsr-text-catalog` has separate Node/Vue/Vite constraints. Do not infer compatibility from an application's older LSR framework version or require the frontend package for PHP-only catalog use.
+
+Owned database content translations require installed **`lsr/orm` 0.3.23+**: older versions lack `Translations`, `TranslationCollection` and `withTranslations()`. This opt-in relation does not change ordinary relations or migrate application schemas. The [ORM skill](skills/lsr-orm/SKILL.md#owned-locale-keyed-content-0323) covers explicit locale keys, exact editing versus whole-row fallback, schema ownership, batch reads and lifecycle-scoped cache invalidation; UI gettext/NEON catalogs remain separate. Check each application's lock file and installed source before adoption; these instructions do not establish publication or update dependencies.
 
 Distribution intentionally follows rolling `master` for now; tagged releases and a package-version compatibility matrix are not maintained. Run `npx skills update` to receive the latest reviewed guidance.
 
