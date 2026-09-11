@@ -24,7 +24,7 @@ Foundation:
 
 - `lsr/interfaces` — shared PSR/LSR interfaces and request method types;
 - `lsr/helpers` — helpers, common exceptions, gettext support dependencies;
-- `lsr/logging` — PSR logger and storage/formatting helpers.
+- `lsr/logging` — PSR logger, named logger DI, recursive/filterable storage, formatting, and PSR-20 clocks since 0.3.4.
 
 Application core:
 
@@ -41,7 +41,7 @@ Optional orchestration:
 - `lsr/inertia` — Inertia response/middleware adapter;
 - `lsr/roadrunner` — HTTP/jobs workers and task production;
 - `lsr/scheduler` — Symfony Scheduler integration;
-- `lsr/otel` — OpenTelemetry providers and global SDK ownership, PSR-3 correlation/export, application tracing/metrics, lifecycle adapters, and runtime flush/shutdown handling;
+- `lsr/otel` — OpenTelemetry providers and global SDK ownership, explicit log storage/opt-in Logger wiring since 0.1.6, separate PSR-3 correlation/export hooks, application tracing/metrics, lifecycle adapters, and runtime flush/shutdown handling;
 - `lsr/text-catalog` — standalone NEON source-copy loading/lookup and gettext/artifact compilation, with optional DI/console adapters; PHP 8.5 or newer;
 - `lsr-text-catalog` — independently installed npm package for typed Vue/gettext facades and runtime/compiled Vite integration; not an LSR core requirement.
 
@@ -110,7 +110,7 @@ Jobs and schedules are application services. Make retryable work idempotent, kee
 - Models/migrations/serialization stay aligned.
 - RoadRunner/scheduler processes never retain request, auth, tenant, locale, or model state between work items.
 - Backend owns active locale; Latte, Inertia, routes, catalogs, and browser formatting stay synchronized.
-- Telemetry context and attributes never leak between work items; exporter failure never changes application control flow.
+- Telemetry context and attributes never leak between work items; explicitly choose synchronous log-storage failure policy rather than assuming OTEL export cannot throw.
 
 ## Choose the Focused Skill
 

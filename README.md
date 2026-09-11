@@ -89,8 +89,8 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 | [`lsr-scheduler`](skills/lsr-scheduler/SKILL.md) | `SchedulerJobInterface`, cron/periodic triggers, scheduled commands, diagnostics, shared state/locks, and supervision. |
 | [`lsr-async-jobs`](skills/lsr-async-jobs/SKILL.md) | RoadRunner task payloads/dispatchers, `TaskProducer`, serializers, acknowledgement, retries, and async CQRS. |
 | [`lsr-roadrunner-runtime`](skills/lsr-roadrunner-runtime/SKILL.md) | DI + `.rr.yaml`, HTTP/jobs workers, RPC/queues, process supervision, optional same/separate-container SSR Node services, and long-running isolation. |
-| [`lsr-logging`](skills/lsr-logging/SKILL.md) | PSR-3/LSR logging, DI, structured context, OpenTelemetry correlation/export, redaction, storage/formatting, worker lifetime, and operations. |
-| [`lsr-observability`](skills/lsr-observability/SKILL.md) | `lsr/otel` DI, global SDK ownership, PSR-3 integration, tracing/metrics, OTLP export, context cleanup, and worker flushing. |
+| [`lsr-logging`](skills/lsr-logging/SKILL.md) | `LoggerExtension`, named loggers, recursive storage stacks, destination filtering/redaction, PSR-20 clocks, formatting, and worker lifetime. |
+| [`lsr-observability`](skills/lsr-observability/SKILL.md) | `lsr/otel` DI, explicit log storage and opt-in auto-wiring, global SDK ownership, PSR-3 correlation/export, tracing/metrics, OTLP export, and worker flushing. |
 
 ### Presentation and localization
 
@@ -122,6 +122,8 @@ Domain routing is available since **`lsr/routing` 0.5.0**; automatic host dispat
 The optional text-catalog pair has its own requirements: `lsr/text-catalog` starts at PHP 8.5, while `lsr-text-catalog` has separate Node/Vue/Vite constraints. Do not infer compatibility from an application's older LSR framework version or require the frontend package for PHP-only catalog use.
 
 Owned database content translations require installed **`lsr/orm` 0.3.23+**: older versions lack `Translations`, `TranslationCollection` and `withTranslations()`. This opt-in relation does not change ordinary relations or migrate application schemas. The [ORM skill](skills/lsr-orm/SKILL.md#owned-locale-keyed-content-0323) covers explicit locale keys, exact editing versus whole-row fallback, schema ownership, batch reads and lifecycle-scoped cache invalidation; UI gettext/NEON catalogs remain separate. Check each application's lock file and installed source before adoption; these instructions do not establish publication or update dependencies.
+
+Named logger DI, recursive storage stacks, per-destination filtering and PSR-20 clocks require **`lsr/logging` 0.3.4+**; `LoggerExtension` and its `services.neon` compatibility wrapper require Nette DI `^3.2`. Explicit OTEL storage and opt-in automatic Logger attachment require **`lsr/otel` 0.1.6+** with that logging API. These exports do not need `ext-opentelemetry` or global SDK registration; do not combine them with PSR-3 hook export. Existing default file output is preserved. See the logging and observability skills before updating each application's dependencies.
 
 Distribution intentionally follows rolling `master` for now; tagged releases and a package-version compatibility matrix are not maintained. Run `npx skills update` to receive the latest reviewed guidance.
 

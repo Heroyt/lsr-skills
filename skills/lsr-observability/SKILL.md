@@ -1,6 +1,6 @@
 ---
 name: lsr-observability
-description: Use for lsr/otel OpenTelemetry setup, global SDK ownership, PSR-3 correlation/export, application tracing and metrics, lifecycle integrations, OTLP export, context cleanup, cardinality, and worker flushing.
+description: Use for lsr/otel OpenTelemetry setup, explicit OTEL log storage and opt-in Logger auto-wiring, global SDK ownership, PSR-3 correlation/export, tracing and metrics, OTLP export, context cleanup, cardinality, and worker flushing.
 ---
 
 # LSR Observability
@@ -13,6 +13,7 @@ Before configuring telemetry, inspect:
 - `vendor/lsr/otel/src/DI/OtelExtension.php` for the installed config schema;
 - `vendor/lsr/otel/src/GlobalSdkRegistration.php`, `Tracing.php`, `Metrics.php`, and `InstrumentationRegistry.php`;
 - the installed `lsr/logging` and `open-telemetry/opentelemetry-auto-psr3` versions when logs are in scope;
+- package `src/Logging/OtelStorage.php` and `LoggerAutoWire.php`, plus logging's record/composite storage interfaces, when using storage integration;
 - installed lifecycle interfaces in every framework package being instrumented;
 - runtime entrypoints for FPM, RoadRunner HTTP/jobs, Console, and Scheduler;
 - deployment `OTEL_*` variables and the Collector/export endpoint.
@@ -61,9 +62,79 @@ Do not use the opt-out merely to suppress the conflict: identify which bootstrap
 construction, configuration, flushing, and shutdown. `otel.enabled: false` creates the safe no-op
 services without registering them globally.
 
+## OTEL Log Storage (0.1.6+)
+
+Use **`lsr/otel` 0.1.6+ with `lsr/logging` 0.3.4+** for record-aware storage. Logging remains an optional dependency: telemetry without this integration still works with missing/older logging packages when automatic wiring is off.
+
+### Explicit Storage by Default
+
+`Lsr\Otel\Logging\OtelStorage` accepts an injected OpenTelemetry API `LoggerInterface`, for example `$registry->logger('vendor/application')`. With compatible logging installed, `OtelExtension` exposes non-autowired `@otel.logging.logger` (scope `lsr/logging`) and `@otel.logging.storage` even when automatic wiring is off.
+
+Register both extensions once, then use the storage in a named logger's graph. This is a complete registration alternative to the earlier OTEL-only example; if logging's `services.neon` is already included, it registers `LoggerExtension` for you:
+
+```neon
+extensions:
+    logging: Lsr\Logging\DI\LoggerExtension
+    otel: Lsr\Otel\DI\OtelExtension
+
+logging:
+    dir: '%constants.appDir%logs'
+    default: @logging.loggers.app
+    storages:
+        local: Lsr\Logging\Storage\SimpleFileStorage(
+            '%constants.appDir%logs/application.log',
+            @loggerJsonFormatter
+        )
+        telemetry: Lsr\Logging\Storage\FilteredStorage(
+            @otel.logging.storage,
+            warning,
+            Lsr\Logging\Filter\ContextBlacklistFilter([password, token, authorization])
+        )
+        stack: Lsr\Logging\Storage\StackStorage([@logging.storages.local, @logging.storages.telemetry])
+    loggers:
+        app:
+            storage: @logging.storages.stack
+        imports:
+            name: result-import
+            storage: @logging.storages.stack
+```
+
+Storage export does not require `ext-opentelemetry`, PSR-3 interception, or global SDK registration. It uses the injected provider's processor/exporter and existing flush/shutdown lifecycle, not a flush on every write. `StackStorage` attempts all destinations before reporting synchronous failures; `ignoreExceptions: true` opts out. Deferred export failures belong to the SDK lifecycle, not stack exception handling.
+
+### Opt-in Automatic Attachment
+
+With both extensions registered, add:
+
+```neon
+otel:
+    integrations:
+        logging:
+            autoWire: true
+            level: warning
+            filter: @exportFilter
+
+services:
+    exportFilter: Lsr\Logging\Filter\ContextBlacklistFilter([password, token])
+```
+
+- Defaults are `autoWire: false`, `level: DEBUG`, and `filter: null`. Every level/context key is allowed unless a destination filter restricts it.
+- Automatic attachment preserves existing storage on DI-managed `Lsr\Logging\Logger` services, including manually declared services and service factories whose resolved service type is `Logger`. It does not intercept arbitrary `new Logger(...)`, unrelated PSR-3 implementations, or products of Nette-generated factory interfaces.
+- Discovery recursively follows `CompositeStorageInterface::getStorages()`. An explicit `OtelStorage` anywhere in that tree, including under filters/nested stacks, prevents another automatic attachment. Automatic level/filter settings do not override explicit storage policies. Custom wrappers must expose their children for discovery.
+- `otel.enabled: false` skips automatic attachment and gives explicit OTEL storage no-op providers. With telemetry enabled, opting into automatic wiring without compatible logging fails configuration.
+
+### Exported Record Contract
+
+- The body preserves the message, severity maps to OTEL numbers/text, and the active span supplies trace/span correlation.
+- The logger's existing `$fileName` becomes protected `lsr.logger.name`, distinguishing loggers sharing storage. Context cannot overwrite it. Direct anonymous `OtelStorage::store()` calls do not add the name.
+- Context is normalized with the logging package. Scalars/homogeneous scalar lists remain native attributes; nested objects/arrays and mixed lists become JSON strings; top-level null attributes are omitted. Resource/service identity remains provider-owned.
+- `['exception' => $throwable]` maps to `exception.type`, `exception.message`, and `exception.stacktrace` from the filtered context, so removed details are not restored. `Logger::exception()` still emits two text records; it does not automatically supply semantic exception attributes.
+- Blacklists are exact, case-sensitive, recursive key filters, not message/string sanitizers. Use `FilteredStorage` to isolate export restrictions from sibling file output; redact globally forbidden data before logging.
+
+Use [lsr-logging](../lsr-logging/SKILL.md) for named loggers, stack failure policies, custom filters/storage, the compatibility wrapper, and PSR-20 clocks.
+
 ## PSR-3 Log Correlation and Export
 
-Use `lsr/logging:^0.3.2` with the official optional instrumentation:
+As a separate alternative, logging 0.3.2+ supports the official optional PSR-3 instrumentation:
 
 ```sh
 composer require open-telemetry/opentelemetry-auto-psr3:^0.3
@@ -82,13 +153,14 @@ OTEL_PHP_PSR3_MODE=inject
 
 The PSR-3 package registers its hooks through Composer. Do not enable a second automatic SDK
 bootstrap merely to use those hooks; `lsr/otel` already constructs and owns the SDK through DI.
-Disable the hook with `OTEL_PHP_DISABLED_INSTRUMENTATIONS=psr3` when it is not wanted. Never combine
-`export` with a manual PSR-3 bridge, and keep SDK diagnostics off the instrumented PSR-3 path to
-avoid recursive log export.
+Disable the hook with `OTEL_PHP_DISABLED_INSTRUMENTATIONS=psr3` when it is not wanted. **Never combine
+`export` with explicit or automatically attached `OtelStorage`, or another manual PSR-3 bridge**:
+independent export paths duplicate records. Injection-only mode can coexist with storage export.
+Keep SDK diagnostics off the instrumented PSR-3 path to avoid recursive log export.
 
 ## Framework Integrations
 
-Installed integrations default to enabled with traces and metrics enabled. Disable only the signal or seam that is not required:
+Tracing/metric integrations default to enabled with traces and metrics enabled. Logging uses the separate default-off `autoWire` configuration above, not `enabled`/`traces`/`metrics` switches. Disable only the tracing/metric signal or seam that is not required:
 
 ```neon
 otel:
@@ -214,7 +286,7 @@ Telemetry is an operational data export. Apply the same or stricter review as st
 - record exception type/status by default, not arbitrary messages as metric attributes;
 - keep resource attributes deployment-owned and free of per-request values.
 
-Use `lsr-logging` for event detail and `lsr-observability` for traces, rates, durations, and correlations. Avoid exporting the same log through both an automatic PSR-3 integration and a manual bridge.
+Use `lsr-logging` for event detail and storage composition, and `lsr-observability` for OTEL storage/export, traces, rates, durations, and correlations. Choose one log export path.
 
 ## Verification
 
@@ -223,8 +295,9 @@ Use `lsr-logging` for event detail and `lsr-observability` for traces, rates, du
 3. Configure a deliberate external provider owner and prove startup fails unless `registerGlobal` is false.
 4. Exercise one successful and one failed operation; confirm parent/child spans, status, attributes, and cleanup.
 5. Record a counter and histogram; confirm units, descriptions, values, and bounded attributes at the Collector/backend.
-6. Run PSR-3 `inject` and `export` in processes that set the mode before Composer autoload. Confirm injected IDs, preserved logger output, active span correlation, and exactly one exported record.
+6. For storage export, compile explicit/default-off and opt-in auto-wiring configurations. Emit through loggers sharing nested storage; verify one exported record per eligible call, logger-name identity, active-span correlation, and filtered export without changing sibling output. Check nested explicit-destination precedence and unmapped custom wrappers.
 7. Disable telemetry and prove the same application path and DI graph still work through no-op providers without changing globals.
 8. Run two sequential RoadRunner requests/jobs and prove the second cannot see the first context.
 9. Exercise the configured flush threshold and worker/process shutdown path.
 10. Inspect exported data for sensitive values and cardinality before production enablement.
+11. If PSR-3 hooks are selected, run `inject` and `export` in separate processes that set the mode before Composer autoload. Confirm injected IDs and preserved logger output; only test hook `export` with storage export disabled.

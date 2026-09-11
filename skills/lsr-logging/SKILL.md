@@ -1,15 +1,15 @@
 ---
 name: lsr-logging
-description: Use for lsr/logging DI setup, PSR-3 logging, structured context, OpenTelemetry correlation/export, storage and formatting, redaction, RoadRunner lifetime, and operational verification.
+description: Use for lsr/logging LoggerExtension and named loggers, recursive storage stacks, per-destination filtering and redaction, PSR-20 clocks, PSR-3 logging, OTEL storage/correlation, formatting, and worker lifetime.
 ---
 
 # LSR Logging
 
 ## Read the Installed Logging Stack
 
-- `vendor/lsr/logging/services.neon`
-- `src/Logger.php`, `ContextExtractor.php`, and `LogLevel.php`
-- `src/Storage/*`, `Formatter/*`, `ContextSerializer/*`, and their interfaces when used
+- `composer.lock`, `vendor/lsr/logging/composer.json`, and `services.neon`
+- package `src/DI/LoggerExtension.php`, `Logger.php`, `LogRecord.php`, `ContextExtractor.php`, and `LogLevel.php`
+- package `src/Storage/*`, `Filter/*`, `Formatter/*`, `ContextSerializer/*`, and their interfaces when used
 - application logging/Tracy/RoadRunner configuration
 - deployment log collection and rotation
 
@@ -17,7 +17,35 @@ Do not assume file paths, retention, JSON formatting, or centralized collection 
 
 ## DI Setup
 
-The package service file expects application constants/parameters. Its default `logger` service preserves the legacy daily text output and constructor behavior:
+Since **`lsr/logging` 0.3.4**, `Lsr\Logging\DI\LoggerExtension` owns logger, storage, formatter, serializer, clock, factory, normalization, and archiver registrations. It requires Nette DI `^3.2`; direct logger construction needs neither Nette DI nor OTEL.
+
+Use named logger instances for distinct streams, not a runtime channel manager. Define reusable storage graphs with native Nette constructor statements (FQNs) or `@service` references; there are no magic driver names:
+
+```neon
+extensions:
+    logging: Lsr\Logging\DI\LoggerExtension
+
+logging:
+    dir: '%constants.appDir%logs'
+    default: @logging.loggers.app
+    storages:
+        local: Lsr\Logging\Storage\RotatingFileStorage(
+            '%constants.appDir%logs/application.log',
+            @loggerJsonFormatter,
+            5242880
+        )
+        stack: Lsr\Logging\Storage\StackStorage([@logging.storages.local])
+    loggers:
+        app:
+            storage: @logging.storages.stack
+        imports:
+            name: result-import
+            storage: @logging.storages.stack
+```
+
+Resolve `@logging.loggers.imports` explicitly where needed. Only the configured default logger is autowired by type; `@logger` is its compatibility alias. A logger's name defaults to its map key, `dir` can be overridden per logger, and omitted `storage` selects legacy daily text output. Omitting the whole `loggers` map creates an `app` logger. Constructor-reference cycles are rejected during compilation.
+
+For existing applications, keep including `vendor/lsr/logging/services.neon` **instead of** registering the extension separately. In 0.3.4 this file is a compatibility wrapper, not a second set of service definitions. It registers `logging` and preserves the `constants.appDir` requirement, application `logger` service overrides, and legacy parameters:
 
 ```neon
 parameters:
@@ -27,7 +55,7 @@ parameters:
 		logLife: '-2 days'
 ```
 
-In `lsr/logging` 0.3.2 and later, the same service file also registers:
+Since 0.3.2 the standard DI setup exposes these helper service IDs, retained by the extension in 0.3.4:
 
 - `loggerFactory` and `loggerClock`;
 - `loggerContextNormalizer`;
@@ -55,9 +83,26 @@ Available formats serve different consumers:
 - `LsrFormatter`: LSR text envelope with JSON context;
 - `SyslogFormatter`: RFC 5424 output with structured data.
 
-Context normalization is defensive, not redaction. It keeps records writable when context contains invalid UTF-8, recursion, exceptions, resources, dates, enums, or non-finite floats. Sensitive values must still be removed before logging.
+Context normalization is defensive, not redaction. It keeps records writable when context contains invalid UTF-8, recursion, exceptions, resources, dates, enums, or non-finite floats. Remove globally forbidden data before logging; destination-specific filters can further restrict export.
 
 Check `composer.lock` before using these APIs. Earlier 0.3.x versions may not provide `LoggerFactory`, the named DI services, clock injection, or the hardened storage behavior.
+
+### Recursive Stacks and Destination Filters (0.3.4+)
+
+- `StackStorage` accepts a fixed array of destinations, including other stacks, and attempts every child in order before throwing `StackStorageException`. Its `exceptions` list preserves ordered failures and nested aggregates.
+- `ignoreExceptions: true` makes that stack best-effort; nested stacks retain their own policies. Choose the policy explicitly when logging must not mask an application failure. This covers synchronous calls, not deferred SDK exporter failures.
+- `FilteredStorage($storage, level: 'warning', filter: $filter)` accepts a severity string or `LogLevel`. It applies the inclusive minimum severity before invoking the optional filter; the default `DEBUG` threshold allows every level.
+- A callable or invokable `Lsr\Logging\Interface\LogFilterInterface` receives a `LogRecord` and returns a replacement record or `null` to drop it. Filters receive detached, normalized context: objects/exceptions become arrays, and recursive/deep values are bounded. They cannot mutate sibling destinations or caller-owned context through the supplied record.
+- `ContextBlacklistFilter(['password', 'token'])` removes exact, case-sensitive keys recursively. Wrapping one destination leaves its siblings unchanged; wrapping a whole stack applies the policy to all its descendants. It does not redact message text or secrets embedded in string values.
+- `LogRecord` carries `level`, `message`, `context`, and optional `loggerName`; preserve the name when constructing replacement records. `Logger` supplies its existing `$fileName`, including when several loggers share one storage.
+- Custom metadata-aware storage implements `RecordStorageInterface` and forwards through `LogRecord::storeTo()`. Legacy `StorageInterface::store()` remains supported without injecting identity into context. Custom composites/decorators expose children via `CompositeStorageInterface::getStorages()` for recursive discovery.
+- `Logger::getStorage()` inspects the current destination; `addStorage()` composes it with another destination. Record-aware pipelines reject unknown severities with `Psr\Log\InvalidArgumentException`.
+
+### PSR-20 Clocks (0.3.4+)
+
+Formatter, daily-storage, and factory clock arguments use `Psr\Clock\ClockInterface` from `psr/clock:^1.0`. Implement `now(): DateTimeImmutable` for a custom/test clock or use a standard third-party implementation. `SystemClock` implements PSR-20, and `@loggerClock` remains available for DI overrides.
+
+The former internal `Lsr\Logging\Interface\ClockInterface` was removed; do not generate new code against it. Normal construction and default file output are unchanged, and existing consumers need no migration.
 
 ## Logging Interface
 
@@ -103,19 +148,16 @@ Coordinate LSR logs, Tracy, RoadRunner stderr/log plugins, and centralized colle
 
 ## OpenTelemetry Integration
 
-Keep `lsr/logging` free of OpenTelemetry SDK dependencies. For `lsr/logging` 0.3.2 and later,
-`lsr/otel` 0.1.1 and the official `open-telemetry/opentelemetry-auto-psr3` package provide the
-integration:
+Keep `lsr/logging` free of OpenTelemetry SDK dependencies. With **`lsr/logging` 0.3.4+ and `lsr/otel` 0.1.6+**, prefer explicit `Lsr\Otel\Logging\OtelStorage` in a stack. Register `OtelExtension` and reference `@otel.logging.storage`; wrap that destination in `FilteredStorage` for export-only severity/redaction. It needs neither `ext-opentelemetry`, PSR-3 hooks, nor global SDK registration.
 
-- `OTEL_PHP_PSR3_MODE=inject` adds the active `trace_id` and `span_id` to context while preserving
-  the configured file/structured output;
-- `OTEL_PHP_PSR3_MODE=export` preserves that output and additionally emits one OTEL log record.
+`otel.integrations.logging.autoWire` is an optional, default-off alternative for DI-managed loggers. Explicit OTEL storage anywhere in a discoverable composite tree wins over automatic settings and prevents an additional attachment. The existing logger name becomes the protected `lsr.logger.name` OTEL attribute; the active span supplies trace/span correlation.
 
-The mode must be set before Composer autoload, and the automatic instrumentation requires
-`ext-opentelemetry`. Let `lsr/otel` own global SDK registration by default. If another SDK bootstrap
-owns the globals, configure `otel.registerGlobal: false` deliberately rather than running two
-provider stacks. Never combine automatic export with a manual bridge, and do not route SDK-internal
-diagnostics through the instrumented PSR-3 logger.
+The separate official `open-telemetry/opentelemetry-auto-psr3` integration remains available with logging 0.3.2+ and OTEL 0.1.1+. It requires `ext-opentelemetry` and its mode must be set before Composer autoload:
+
+- `OTEL_PHP_PSR3_MODE=inject` adds active `trace_id` and `span_id` to context while preserving configured output. Injection-only instrumentation can coexist with OTEL storage.
+- `OTEL_PHP_PSR3_MODE=export` preserves that output and additionally emits an OTEL record through global providers. **Never combine it with explicit or automatically attached `OtelStorage`**: these are independent export paths and duplicate records.
+
+Let `lsr/otel` own global registration when hooks need its providers. If another SDK bootstrap owns the globals, configure `otel.registerGlobal: false` deliberately. Keep SDK-internal diagnostics off the instrumented logging path to prevent recursive export.
 
 Load `lsr-observability` for package installation, global provider ownership, lifecycle, export, and
 conflict verification.
@@ -136,16 +178,19 @@ Bound context size and avoid retaining throwable/object graphs in singleton stat
 - Logging failures must not silently replace the original application failure; test unwritable/full storage behavior.
 - Metrics measure rates/durations; logs explain individual events. Do not use high-cardinality logs as a metric substitute.
 
-Use `lsr-observability` for OpenTelemetry traces, metrics, context propagation, and runtime flush behavior. Logging and telemetry may correlate one operation, but do not duplicate event export through automatic and manual bridges.
+Use `lsr-observability` for OTEL storage wiring, exported attribute semantics, traces, metrics, context propagation, and runtime flush behavior. Storage does not flush per write; deferred export uses the provider's existing lifecycle.
 
 ## Verification
 
 - Emit representative PSR levels through the real application/runtime.
 - Assert context formatting, redaction, and fallback normalization for unsafe values.
+- For stacks, verify every sibling is attempted despite an earlier failure, nested aggregates remain observable, and the chosen ignore policy works.
+- Verify threshold-before-filter behavior, `null` drops, recursive case-sensitive blacklists, and isolation between filtered exports and sibling output.
 - Trigger one handled and one unhandled failure and inspect all destinations for duplication.
 - Test unwritable storage behavior in a disposable directory.
 - For long-running workers, cross a simulated date boundary and verify a new dated file.
 - Exercise concurrent writers when file storage is shared by multiple local workers.
 - For rotating storage, cover the exact byte boundary and an oversized record.
 - Compile the real DI container, then run logging tests and static analysis.
-- When OpenTelemetry logging is enabled, run `inject` and `export` in fresh processes that set the mode before Composer autoload; verify correlation IDs, preserved local output, and exactly one exported record.
+- For OTEL storage, verify logger-name identity, active-span correlation, export-only redaction, automatic attachment once, and nested explicit-destination precedence.
+- When PSR-3 hooks are used, run `inject` and `export` in separate fresh processes that set the mode before Composer autoload; verify correlation IDs, preserved local output, and exactly one exported record. Do not enable storage export in the hook-export scenario.
