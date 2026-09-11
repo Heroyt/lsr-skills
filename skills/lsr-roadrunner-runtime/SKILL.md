@@ -42,7 +42,7 @@ Read the installed schema and generated service names before copying this shape.
 
 ### Worker Loggers
 
-The compatible worker logger configuration is currently an **unreleased patch**. Inspect the installed `RoadrunnerExtension` and worker classes; published older workers construct private loggers and cannot consume these settings.
+Compatible worker logger configuration is available since **`lsr/roadrunner` 0.1.16**. Check the installed version, `RoadrunnerExtension` and worker classes; older published workers construct private loggers and cannot consume these settings.
 
 ```neon
 # Add to existing RoadRunner configuration.

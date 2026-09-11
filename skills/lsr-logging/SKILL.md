@@ -70,7 +70,7 @@ Prefer injecting `Psr\Log\LoggerInterface` or the narrow concrete capability nee
 
 ## Package-Owned Logger Selection
 
-The compatible Core/DB/ORM/RoadRunner logger wiring is an **unreleased patch set**. Use it only when the installed source contains the options below, for example through explicitly configured Composer path repositories. A skill update or an unchanged package version field does not make these options available in an older published archive.
+Compatible package-owned logger wiring is available since **Core 0.5.1, DB 0.3.17, ORM 0.3.25 and RoadRunner 0.1.16**. Check installed versions before using the options below. A skill update does not install or upgrade Composer packages.
 
 Configure destinations in `LoggerExtension`, then select those logger services in the consuming package:
 

@@ -30,7 +30,7 @@ Use an explicit PDO driver/DSN for non-MySQL databases. Read `Connection::normal
 
 ## Package Logger Selection
 
-The configurable logger integration is an **unreleased compatible patch**. Check the installed `DbExtension` schema and `Connection`/`DB` signatures; use an explicit Composer path install for unpublished code rather than assuming the published package already contains it.
+Configurable logger integration is available since **`lsr/db` 0.3.17**. Check the installed version, `DbExtension` schema and `Connection`/`DB` signatures before using it; older published versions do not contain these options.
 
 ```neon
 # Supplement existing connection definitions.

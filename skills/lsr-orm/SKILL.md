@@ -176,7 +176,7 @@ foreach ($products as $product) {
 
 ## Per-Model Logging
 
-The configurable model logger provider is an **unreleased compatible patch**. Check the installed `ModelRepository`, `Logging/ModelLoggerProviderInterface.php`, and `OrmExtension` before using it. The storage-aware implementation requires `lsr/logging:^0.3.2`; stacks and OTEL record identity require the newer logging/OTEL versions documented in [lsr-logging](../lsr-logging/SKILL.md).
+The configurable model logger provider is available since **`lsr/orm` 0.3.25**. Check the installed version, `ModelRepository`, `Logging/ModelLoggerProviderInterface.php`, and `OrmExtension` before using it. The storage-aware implementation requires `lsr/logging:^0.3.2`; stacks and OTEL record identity require the newer logging/OTEL versions documented in [lsr-logging](../lsr-logging/SKILL.md).
 
 ```neon
 # Add to an already registered ORM extension and logging storage graph.
