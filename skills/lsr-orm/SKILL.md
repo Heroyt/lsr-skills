@@ -85,7 +85,7 @@ Use relations when they are part of the model's lifecycle interface. For large r
 
 Use this relation for database-backed, administrator/user-authored multilingual content. UI source copy and gettext catalogs remain separate: follow [localization](../lsr-localization/SKILL.md) and, when installed, [text-catalog](../lsr-text-catalog/SKILL.md). Do not add an ambient locale dependency to models or assume the application has a translatable base class.
 
-Read installed `Attributes/Relations/Translations.php`, `TranslationCollection.php`, generated relation metadata and the [package example](https://github.com/Heroyt/lsr-orm/blob/master/README.md#owned-content-translations-since-0323) before adapting:
+Before adapting the example, read the installed package's `vendor/lsr/orm/README.md` and its `src/Attributes/Relations/Translations.php`, `src/TranslationCollection.php`, `src/ModelQuery.php` and generated relation metadata. Those installed files, not a remote `master` branch, define the available contract. If they lack this feature, upgrade to a published release providing it or explicitly configure a local Composer path repository for development; do not assume this skill update makes 0.3.23 available from the package repository.
 
 ```php
 use Lsr\Orm\Attributes\PrimaryKey;
