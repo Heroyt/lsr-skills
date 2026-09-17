@@ -1,6 +1,6 @@
 ---
 name: lsr-orm
-description: Use for LSR ORM models, configurable per-model logger providers, model configuration, primary keys, typed properties, querying, persistence, relations, owned locale-keyed content translations, serialization, validation, and model cache behavior.
+description: Use for LSR ORM models, configurable per-model logger providers, model configuration, primary keys, typed properties, column types and value conversion, querying, persistence, relations, owned locale-keyed content translations, serialization, validation, and model cache behavior.
 ---
 
 # LSR ORM
@@ -11,7 +11,7 @@ description: Use for LSR ORM models, configurable per-model logger providers, mo
 - Read the application's model base class if one exists. The framework requires `Lsr\Orm\Model`; an application-specific `BaseModel` is a local convention, not an LSR requirement.
 - Read the migration entry for every affected table.
 - Read serializer, object-validation, and cache configuration because ORM behavior composes those packages.
-- Check `composer.lock` and installed package source before using version-sensitive APIs. `Translations`, `TranslationCollection` and `ModelQuery::withTranslations()` require `lsr/orm` **0.3.23+**; older installations lack them. Skill updates do not install, publish or upgrade Composer packages.
+- Check `composer.lock` and installed package source before using version-sensitive APIs. `Translations`, `TranslationCollection` and `ModelQuery::withTranslations()` require `lsr/orm` **0.3.23+**; `ColumnType` and the dibi fallback for non-bindable write values require **0.4.1+**; older installations lack them. Skill updates do not install, publish or upgrade Composer packages.
 
 ## Model Shape
 
@@ -64,8 +64,49 @@ $published = Article::query()
 - Coordinate multi-model invariants in an explicit DB transaction.
 - Use timestamp traits only when the schema contains matching columns.
 - Do not bypass model persistence with raw DB writes when validation, relations, hooks, instance caching, or cache clearing must run.
+- `save()` writes plain scalar data with native PDO statements and lets dibi translate everything else. That fallback requires `lsr/orm` **0.4.1+**. On `0.4.0` and `0.3.x` the native path binds every value with `PDO::PARAM_*`, so a `Dibi\Expression` in a model property throws `Object of class Dibi\Expression could not be converted to string`, a `Dibi\Literal` is silently stored as a wrong value, and dibi key modifiers other than `%bin` are dropped - but only on dibi's generic PDO driver, so SQLite-driver test suites do not reveal it.
 
 `Lsr\Core\Models\WithCacheClear` is an optional application base-model trait supplied by `lsr/core`. If the application uses it, preserve its table, query, instance, and relation tag contract. It is not automatically applied to every `Lsr\Orm\Model`.
+
+## Column Types (0.4.1+)
+
+Declare a column type when a column's storage format differs from the property's PHP type: a value object, a JSON document, an encrypted payload or a spatial geometry. Confirm the installed `vendor/lsr/orm/src/Attributes/ColumnType.php` exists before using it; `0.4.0` and older lack the attribute and the conversion hooks, and a skill update neither installs nor publishes a release.
+
+```php
+use Attribute;
+use Dibi\Expression;
+use Lsr\Orm\Attributes\ColumnType;
+use Lsr\Orm\Model;
+
+#[Attribute(Attribute::TARGET_PROPERTY)]
+readonly class PointType extends ColumnType
+{
+	public function __construct(public int $srid = 4326) {}
+
+	public function toDatabase(mixed $value, Model $model) : mixed {
+		assert($value === null || $value instanceof Point);
+		return $value === null
+			? null
+			: new Expression('ST_GeomFromText(%s, %i)', $value->toWkt(), $this->srid);
+	}
+
+	public function fromDatabase(mixed $value, Model $model) : mixed {
+		return is_string($value) ? Point::fromWkt($value) : null;
+	}
+}
+```
+
+The property then declares the type instead of holding a driver value: `#[PointType(srid: 4326)] public ?Point $position = null;`.
+
+Rules:
+
+- `ColumnType` is abstract and is not itself an attribute. Every concrete type is `readonly` and carries `#[Attribute(Attribute::TARGET_PROPERTY)]`. One type class is reusable on any number of properties and models; keep it stateless, because the instance is resolved once per model class/property and cached in `ModelRepository::$columnTypes`.
+- A property may declare at most one column type; a second one throws `RuntimeException` while generating model metadata. Column types are part of the generated config, so regenerate it (`orm:cache:clean`, or remove `TMP_DIR/models`) after adding or removing one.
+- The type owns the whole conversion of its column. Built-in enum, date-time, scalar-cast and the `array`/`object` skip do not run, so `array` and `object` properties become persistable and the property may hold any PHP value. Both directions also receive `null`; the type decides what a missing value means, and `fromDatabase()` must return a value assignable to the declared property type.
+- `#[Transform]` attributes still run, always on the PHP-side value: on save before `toDatabase()`, on load after `fromDatabase()`.
+- `toDatabase()` returning `null` or a scalar is bound as a query parameter. Returning a `Dibi\Expression`/`Dibi\Literal` converts the value in SQL instead - `new Expression('ST_GeomFromText(%s, %i)', $wkt, 4326)`, `new Expression('%bin', $binary)`, `new Literal('now()')` - and routes that write through dibi.
+- There is no read-side SQL wrapper: model queries select `*` and models hydrate from rows produced by arbitrary queries, so `fromDatabase()` receives the column exactly as the driver returns it. When the stored form is unreadable in PHP (a geometry returned as WKB), parse that representation in the type or keep the readable copy in companion columns.
+- Prefer a column type over assigning driver-specific values to a `mixed` property. A raw `Dibi\Expression` in a property writes correctly on 0.4.1+, but it carries no load-side conversion, no type safety and no reusable contract.
 
 ## Relations
 
@@ -210,4 +251,5 @@ Never store a loaded model in a singleton expecting it to remain fresh across re
 - Verify serialization for dates, enums, exclusions, aliases, and relation collections when exposed externally.
 - Run the migration update/fresh-install checks against disposable databases when schema changed.
 - For owned translations, cover exact misses, whole-row fallback with null fields, explicit child saves, duplicate-locale constraints, moves between parents/locales, missing-result invalidation, batch loading, serialization exclusion, cascade deletion and request/job cache isolation.
+- For column types, cover the round trip in both directions including `null`, the SQL-conversion form when one is used, and regenerated model metadata. Exercise the write on the driver the application actually deploys: a SQLite-driver suite never enters the native PDO write path that historically broke expression values.
 - Run package/application static analysis and the smallest relevant test suite.

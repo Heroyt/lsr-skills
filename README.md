@@ -76,7 +76,7 @@ For a narrow task, install/use only the matching skill. Explicit invocation synt
 | --- | --- |
 | [`lsr-db`](skills/lsr-db/SKILL.md) | Connection/bootstrap, configurable PSR-3 logging and Dibi event translation, the DB facade, fluent queries, DTOs, caching, transactions, and opt-in idle MySQL reconnects. |
 | [`lsr-db-migrations`](skills/lsr-db-migrations/SKILL.md) | Domain-split migration includes, definitions/modifications, indexes, foreign keys, views, and installer verification. |
-| [`lsr-orm`](skills/lsr-orm/SKILL.md) | Models, per-model logger providers and shared storage, properties, relations, owned locale-keyed content translations since 0.3.23, caching, and schema alignment. |
+| [`lsr-orm`](skills/lsr-orm/SKILL.md) | Models, per-model logger providers and shared storage, properties, column types since 0.4.1, relations, owned locale-keyed content translations since 0.3.23, caching, and schema alignment. |
 | [`lsr-cache`](skills/lsr-cache/SKILL.md) | File/Redis cache configuration, namespaces, dependencies, tags, invalidation, and commands. |
 | [`lsr-serializer-validation`](skills/lsr-serializer-validation/SKILL.md) | Symfony serializer integration, mapping, typed DTOs, validation attributes, request mapping, and DB DTO fetches. |
 
@@ -122,6 +122,8 @@ Domain routing is available since **`lsr/routing` 0.5.0**; automatic host dispat
 The optional text-catalog pair has its own requirements: `lsr/text-catalog` starts at PHP 8.5, while `lsr-text-catalog` has separate Node/Vue/Vite constraints. Do not infer compatibility from an application's older LSR framework version or require the frontend package for PHP-only catalog use.
 
 Owned database content translations require installed **`lsr/orm` 0.3.23+**: older versions lack `Translations`, `TranslationCollection` and `withTranslations()`. This opt-in relation does not change ordinary relations or migrate application schemas. The [ORM skill](skills/lsr-orm/SKILL.md#owned-locale-keyed-content-0323) covers explicit locale keys, exact editing versus whole-row fallback, schema ownership, batch reads and lifecycle-scoped cache invalidation; UI gettext/NEON catalogs remain separate. Check each application's lock file and installed source before adoption; these instructions do not establish publication or update dependencies.
+
+Property column types are available since **`lsr/orm` 0.4.1**, together with the write-path fix that makes the ORM hand `Dibi\Expression`/`Dibi\Literal` values and dibi key modifiers to dibi instead of binding them as PDO parameters. On 0.4.0 and older, such a value in a model property fails or is stored incorrectly, and only on dibi's generic PDO driver. The [ORM skill](skills/lsr-orm/SKILL.md#column-types-041) covers the reusable `ColumnType` attribute, value versus SQL conversion, the absent read-side wrapper and metadata regeneration. Check each application's lock file and installed source before adoption.
 
 Named logger DI, recursive storage stacks, per-destination filtering and PSR-20 clocks require **`lsr/logging` 0.3.4+**; `LoggerExtension` and its `services.neon` compatibility wrapper require Nette DI `^3.2`. Explicit OTEL storage and opt-in automatic Logger attachment require **`lsr/otel` 0.1.6+** with that logging API. These exports do not need `ext-opentelemetry` or global SDK registration; do not combine them with PSR-3 hook export. Existing default file output is preserved. See the logging and observability skills before updating each application's dependencies.
 

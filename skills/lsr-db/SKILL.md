@@ -128,6 +128,7 @@ DB::delete('users', ['id_user = %i', $id]);
 - Prefer ORM lifecycle operations when model validation, relations, hooks, and cache invalidation are part of the change.
 - Use the DB facade for projections, aggregates, bulk operations, atomic SQL expressions, migrations, and lock-sensitive operations.
 - Raw writes do not automatically know application-level cache dependencies. Invalidate the affected tags explicitly.
+- `Dibi\Expression` and `Dibi\Literal` values and dibi key modifiers (`'data%bin'`) are translated by dibi in facade writes. Do not hand them to ORM model properties on `lsr/orm` 0.4.0 or older, where the native PDO write path mis-binds them; from `lsr/orm` 0.4.1 such writes fall back to dibi, and a `ColumnType` is the declared way to convert a column in SQL. See the [ORM skill](../lsr-orm/SKILL.md#column-types-041).
 - Never interpolate request/user values into SQL strings.
 
 ## Transactions
