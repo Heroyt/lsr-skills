@@ -5,7 +5,7 @@ description: Use for LSR internationalization/localization with native gettext (
 
 # LSR Localization with Gettext
 
-LSR's native gettext implementation is the backend UI-message translation authority. In Core 0.7 (unreleased) the shared gettext engine is the framework-neutral `lsr/translations` package, which `Lsr\Core\Translations` delegates to; Laravel applications can use the same runtime through its optional service provider. For Inertia + Vue 3, use the same gettext translations through `vue3-gettext`; do not create a separate UI translation system. Applications optionally using `lsr/text-catalog` and `lsr-text-catalog` should also follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for NEON source ownership, compiler artifacts and injected adapters. Neither package replaces application-owned locale selection. Database-backed multilingual content is a separate responsibility; see [ORM-owned content](#database-backed-multilingual-content).
+LSR's native gettext implementation is the backend UI-message translation authority. In Core 0.7 the shared gettext engine is the framework-neutral `lsr/translations` package, which `Lsr\Core\Translations` delegates to; Laravel applications can use the same runtime through its optional service provider. For Inertia + Vue 3, use the same gettext translations through `vue3-gettext`; do not create a separate UI translation system. Applications optionally using `lsr/text-catalog` and `lsr-text-catalog` should also follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for NEON source ownership, compiler artifacts and injected adapters. Neither package replaces application-owned locale selection. Database-backed multilingual content is a separate responsibility; see [ORM-owned content](#database-backed-multilingual-content).
 
 ## Read the Installed Backend
 
@@ -30,7 +30,7 @@ lsr:
 			- UI
 ```
 
-Core 0.7 (unreleased) keeps these options and the full public `Translations` API; applications still on core ^0.3 are not migrated and run the previous implementation, so check `composer.lock` before relying on the behavior below.
+Core 0.7 keeps these options and the full public `Translations` API; applications still on core ^0.3 are not migrated and run the previous implementation, so check `composer.lock` before relying on the behavior below.
 
 Read `LsrExtension::getConfigSchema()` for the installed version.
 
@@ -71,7 +71,7 @@ Latte exposes LSR translation tags/functions/filters through the installed exten
 
 The environment is process-global: apply locales sequentially. ZTS/FrankenPHP threads are unsafe, and long-running workers must re-apply the locale per request.
 
-### Core 0.7 Behavior Changes (unreleased)
+### Core 0.7 Behavior Changes
 
 Review applications and tests before upgrading from core ^0.3:
 
@@ -143,7 +143,7 @@ Expose clear scripts such as `i18n:extract`, `i18n:validate`, and `i18n:compile`
 
 For package-owned catalogs, use `TextCatalogCompiler` instead: it loads NEON, maintains POT/PO with semantic-key contexts, validates translations, and produces MO plus the PHP cache and optional `catalog.ts`, `catalog.compiled.ts`, and format-v1 `catalog.build.json`. Follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for the build contract. Do not extract compiled macros/generated output or independently run the generic PHP/Latte/Vue extractor against package-owned catalogs; keep any remaining direct-gettext catalogs under explicitly separate ownership.
 
-For direct-gettext catalogs, `Translations` can collect missing messages at runtime when `CHECK_TRANSLATIONS` and Tracy/debug behavior enable it, then write PO/MO/POT through `updateTranslations()`. Treat this as a development bridge, not the preferred deterministic extractor or a writer for package-owned catalogs. In Core 0.7 (unreleased) only domains that actually received new messages are rewritten; earlier versions rewrote every loaded domain. Never enable catalog mutation in production workers.
+For direct-gettext catalogs, `Translations` can collect missing messages at runtime when `CHECK_TRANSLATIONS` and Tracy/debug behavior enable it, then write PO/MO/POT through `updateTranslations()`. Treat this as a development bridge, not the preferred deterministic extractor or a writer for package-owned catalogs. In Core 0.7 only domains that actually received new messages are rewritten; earlier versions rewrote every loaded domain. Never enable catalog mutation in production workers.
 
 The build must fail when catalog validation or compilation fails. Production startup must consume immutable compiled artifacts; it must not compile or mutate catalogs.
 

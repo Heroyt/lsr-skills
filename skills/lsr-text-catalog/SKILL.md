@@ -23,7 +23,7 @@ Read the consumer's manifests/locks and actual installed exports before adapting
 The packages are independently installed and versioned: Composer `lsr/text-catalog` and npm `lsr-text-catalog`. Read each installed manifest for its package version; artifact format **1** is a separate compatibility contract. Tags and installation instructions do not establish registry publication; verify availability before selecting a registry version.
 
 - PHP requires **>=8.5**, `ext-dom`, `ext-libxml`, `nette/neon ^3.4` and `gettext/gettext ^5.7`. Do not reuse the older PHP >=8.4 floor of current LSR core/console packages.
-- Loading/compiling needs no LSR framework, DI container, native gettext extension, Node, Vue or Redis. `TextTranslator` (unreleased `lsr/text-catalog` 0.2.0) only *suggests* `lsr/translations ^0.1`, which provides the `MessageTranslator` it calls and itself requires `ext-gettext`; the catalog package no longer checks `ext-gettext` itself.
+- Loading/compiling needs no LSR framework, DI container, native gettext extension, Node, Vue or Redis. `TextTranslator` (`lsr/text-catalog` 0.2.0+) only *suggests* `lsr/translations ^0.1`, which provides the `MessageTranslator` it calls and itself requires `ext-gettext`; the catalog package no longer checks `ext-gettext` itself.
 - Optional integrations require `nette/di ^3.2`, Laravel `^12.0 || ^13.0` (provider; the package conflicts with `laravel/framework <12`) and/or `symfony/console ^7.4 || ^8.0`; `lsr/console ^0.2` is optional command discovery, not a compiler requirement.
 - npm is ESM, requires Node `^20.19.0 || >=22.12.0`, Vue `^3.5.42` and vue3-gettext `^4.0.1`. `/vite` needs optional peer Vite `^8.2.2`; browser `/runtime`, `/compiled` and `/types` exports do not import the Node plugin.
 - Runtime-only consumers can use prebuilt data without PHP compilation, Vite or LSR. No sanitizer is bundled or required for plain text.
@@ -116,7 +116,7 @@ Construct `new Lsr\TextCatalog\Translation\TextTranslator($catalog, $messageTran
 - PHP supports named `%{name}` placeholders or numeric `sprintf` arguments, never mixed key modes. Plain output remains unescaped data: render through normal escaping.
 - `langHtmlText('example.rich', ['name' => $untrustedName])` checks HTML eligibility, translates/interpolates, then sanitizes the **final output**. Missing sanitizer rejects the call. Never raw-render `text()` or `langText()` output or trust translation/source validation alone.
 
-The application owns `setlocale`, environment, gettext domain binding and encoding. In LSR apps core `Translations` (Core 0.7, unreleased) or `lsr/translations` `Localization` applies the locale; creating a translator does not isolate process-global native gettext state. Verify sequential locale resets on the actual deployment platform; concurrent native locale mutation needs serialization or isolated workers. Use [long-running runtime guidance](../lsr-roadrunner-runtime/SKILL.md) rather than assuming a new adapter instance resets native caches.
+The application owns `setlocale`, environment, gettext domain binding and encoding. In LSR apps core `Translations` (Core 0.7) or `lsr/translations` `Localization` applies the locale; creating a translator does not isolate process-global native gettext state. Verify sequential locale resets on the actual deployment platform; concurrent native locale mutation needs serialization or isolated workers. Use [long-running runtime guidance](../lsr-roadrunner-runtime/SKILL.md) rather than assuming a new adapter instance resets native caches.
 
 ### Laravel
 

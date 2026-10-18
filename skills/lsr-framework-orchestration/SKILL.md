@@ -28,7 +28,7 @@ Foundation:
 
 Application core:
 
-- `lsr/core` — container bootstrap, `App`, request dispatch, controllers, sessions/cookies, Latte, links, translations (delegating to `lsr/translations` from the unreleased Core 0.7), migration loading;
+- `lsr/core` — container bootstrap, `App`, request dispatch, controllers, sessions/cookies, Latte, links, translations (delegating to `lsr/translations` from Core 0.7), migration loading;
 - `lsr/routing` — router, groups, middleware, localized routes, route attributes/cache;
 - `lsr/request` — PSR request/response factories, mapped request validation, response DTOs;
 - `lsr/caching`, `lsr/db`, `lsr/serializer`, `lsr/object-validation`, `lsr/orm` — persistence/data stack.
