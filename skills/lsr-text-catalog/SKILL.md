@@ -1,6 +1,6 @@
 ---
 name: lsr-text-catalog
-description: Use for lsr/text-catalog and lsr-text-catalog integration, canonical NEON source copy, gettext PO compilation, typed Vue runtime facades, strict compiled Vite macros, artifact validation, HTML safety and app/request isolation.
+description: Use for lsr/text-catalog and lsr-text-catalog integration, canonical NEON source copy, gettext PO compilation, Nette/Laravel adapters, typed Vue runtime facades, strict compiled Vite macros, artifact validation, HTML safety and app/request isolation.
 ---
 
 # LSR Text Catalog
@@ -16,15 +16,15 @@ Database-backed administrator/user-authored content is not UI source copy. For t
 Read the consumer's manifests/locks and actual installed exports before adapting examples:
 
 - PHP package README and `composer.json`; `src/{CatalogConfig,TextCatalogLoader,TextCatalog,TextCatalogCompiler}.php`.
-- Optional `src/Di/TextCatalogExtension.php`, `src/Console/CompileTextCatalogCommand.php` and `src/Translation/TextTranslator.php`.
+- Optional `src/Di/TextCatalogExtension.php`, `src/Laravel/TextCatalogServiceProvider.php` with `config/text-catalog.php`, `src/Console/CompileTextCatalogCommand.php` and `src/Translation/TextTranslator.php`; with the translator, the installed `vendor/lsr/translations/src/{MessageTranslator,GettextTranslator,GettextEnvironment}.php`.
 - npm README and `package.json`; `src/{types,language}.ts`, `src/{runtime,compiled}/index.ts`, and `src/vite/{index,manifest,transform}.ts`.
 - Consumer compiler entrypoint, source/PO directories, generated output, real facades, Vite root/aliases and typecheck/build scripts.
 
 The packages are independently installed and versioned: Composer `lsr/text-catalog` and npm `lsr-text-catalog`. Read each installed manifest for its package version; artifact format **1** is a separate compatibility contract. Tags and installation instructions do not establish registry publication; verify availability before selecting a registry version.
 
 - PHP requires **>=8.5**, `ext-dom`, `ext-libxml`, `nette/neon ^3.4` and `gettext/gettext ^5.7`. Do not reuse the older PHP >=8.4 floor of current LSR core/console packages.
-- Loading/compiling needs no LSR framework, DI container, native gettext extension, Node, Vue or Redis. The native translator alone needs `ext-gettext`.
-- Optional integrations require `nette/di ^3.2` and/or `symfony/console ^7.4 || ^8.0`; `lsr/console ^0.2` is optional command discovery, not a compiler requirement.
+- Loading/compiling needs no LSR framework, DI container, native gettext extension, Node, Vue or Redis. `TextTranslator` (unreleased `lsr/text-catalog` 0.2.0) only *suggests* `lsr/translations ^0.1`, which provides the `MessageTranslator` it calls and itself requires `ext-gettext`; the catalog package no longer checks `ext-gettext` itself.
+- Optional integrations require `nette/di ^3.2`, Laravel `^12.0 || ^13.0` (provider; the package conflicts with `laravel/framework <12`) and/or `symfony/console ^7.4 || ^8.0`; `lsr/console ^0.2` is optional command discovery, not a compiler requirement.
 - npm is ESM, requires Node `^20.19.0 || >=22.12.0`, Vue `^3.5.42` and vue3-gettext `^4.0.1`. `/vite` needs optional peer Vite `^8.2.2`; browser `/runtime`, `/compiled` and `/types` exports do not import the Node plugin.
 - Runtime-only consumers can use prebuilt data without PHP compilation, Vite or LSR. No sanitizer is bundled or required for plain text.
 
@@ -101,20 +101,45 @@ extensions:
     textCatalog: Lsr\TextCatalog\Di\TextCatalogExtension
 ```
 
-The sibling `textCatalog:` configuration takes the same named fields as `CatalogConfig`, including optional `potFile`/`frontendDirectory`, plus `useCompiledCache` and `command` (both default `false`). With this extension name, services are `textCatalog.config`, `.loader`, `.catalog` and `.compiler`; `command: true` additionally registers `.command`.
+The sibling `textCatalog:` configuration takes the same named fields as `CatalogConfig`, including optional `potFile`/`frontendDirectory`, plus `useCompiledCache`, `command`, `translator` (all default `false`) and `sanitizer` (`string|Statement|null`, for example `@htmlSanitizer` or `App\HtmlSanitizer()`). With this extension name, services are `textCatalog.config`, `.loader`, `.catalog` and `.compiler`; `command: true` additionally registers `.command`.
+
+`translator: true` (requires `lsr/translations`) registers `textCatalog.translator` (`TextTranslator`, with `sanitizer` as its HTML sanitizer). It reuses an existing `MessageTranslator` service in the container; otherwise it registers `textCatalog.messageTranslator` as `GettextTranslator(<catalog domain>)`. In LSR apps the catalog domain must be bound by core, so list it in core `translations.domains` and keep `languageDirectory` equal to `LANGUAGE_DIR`; do not expect the extension to bind domains or apply locales.
 
 `CompileTextCatalogCommand($compiler)` is named `texts:cache:compile`. Add it to a consumer-owned Symfony Console application or let installed LSR console discover its DI service. There is no package-provided `bin/console`, automatic application boot or global helper registration. Verify command discovery before using `php bin/console texts:cache:compile`; compilation failures must retain a nonzero exit status.
 
 ### Native Translation and HTML
 
-Inject `Lsr\TextCatalog\Translation\TextTranslator($catalog, domain: 'example', sanitizeHtml: $applicationSanitizer)`; the sanitizer is an application-supplied callable, not a package helper. Omit it for plain-text-only use.
+Construct `new Lsr\TextCatalog\Translation\TextTranslator($catalog, $messageTranslator, 'example', $applicationSanitizer)` with an `Lsr\Translations\MessageTranslator` (for example `GettextTranslator`), or inject the Nette/Laravel-registered service; the sanitizer is an application-supplied callable, not a package helper. Omit it for plain-text-only use.
 
 - `langText('example.title', format: ['name' => 'Ada'])` translates with the semantic context, then interpolates.
 - `langText('example.count.one', 'example.count.plural', 3, ['count' => 3])` uses sibling plural keys and their parent context.
 - PHP supports named `%{name}` placeholders or numeric `sprintf` arguments, never mixed key modes. Plain output remains unescaped data: render through normal escaping.
 - `langHtmlText('example.rich', ['name' => $untrustedName])` checks HTML eligibility, translates/interpolates, then sanitizes the **final output**. Missing sanitizer rejects the call. Never raw-render `text()` or `langText()` output or trust translation/source validation alone.
 
-The application owns `setlocale`, environment, gettext domain binding and encoding. Creating a translator does not isolate process-global native gettext state. Verify sequential locale resets on the actual deployment platform; concurrent native locale mutation needs serialization or isolated workers. Use [long-running runtime guidance](../lsr-roadrunner-runtime/SKILL.md) rather than assuming a new adapter instance resets native caches.
+The application owns `setlocale`, environment, gettext domain binding and encoding. In LSR apps core `Translations` (Core 0.7, unreleased) or `lsr/translations` `Localization` applies the locale; creating a translator does not isolate process-global native gettext state. Verify sequential locale resets on the actual deployment platform; concurrent native locale mutation needs serialization or isolated workers. Use [long-running runtime guidance](../lsr-roadrunner-runtime/SKILL.md) rather than assuming a new adapter instance resets native caches.
+
+### Laravel
+
+Laravel 12/13 applications get `Lsr\TextCatalog\Laravel\TextCatalogServiceProvider` through package auto-discovery. Publish config with `php artisan vendor:publish --tag=text-catalog-config` (`config/text-catalog.php`):
+
+| Key | Default |
+| --- | --- |
+| `source_directory` | `resource_path('text-catalog')` |
+| `cache_file` | `base_path('bootstrap/cache/text-catalog.php')` |
+| `language_directory` | `lang_path('gettext')` |
+| `source_root` | `base_path()` |
+| `domain` | `'catalog'` |
+| `locales` / `source_locale` | `['en_US']` / `'en_US'` |
+| `frontend_directory` | `null` (PHP-only) |
+| `pot_file` | `null` (`<language_directory>/<domain>.pot`) |
+| `use_compiled_cache` | `true` |
+| `sanitizer` | `null`, or a container-resolvable callable class/binding returning the sanitized string |
+
+- The provider registers `CatalogConfig`, `TextCatalogLoader`, `TextCatalog` and `TextCatalogCompiler` singletons and the Artisan command `php artisan texts:cache:compile` (the same `CompileTextCatalogCommand`, nonzero exit on failure).
+- With `lsr/translations` installed it also binds `TextTranslator` (using the container's `MessageTranslator`), extends `GettextEnvironment` so the catalog domain is bound to `language_directory` on every locale switch, and adds Blade `@langText(...)` (escaped) and `@langHtmlText(...)` (raw output of the configured sanitizer). Without a `sanitizer`, `langHtmlText` rejects the call.
+- Laravel owns locale selection through `lsr/translations`; see [localization](../lsr-localization/SKILL.md#laravel) for locale mirroring, Octane and OS-locale checks. Put the catalog locales in `supported_languages` of `config/lsr-translations.php` as well as `locales` here.
+- Compile in CI/build, never on a request, and do not hook it into `artisan optimize`. Deploy the compiled `cache_file` with the application.
+- The npm Vite plugin's `compile()` callback can run the command: `compile(root) { execFileSync('php', ['artisan', 'texts:cache:compile'], { cwd: root, stdio: 'inherit' }); }`.
 
 ## Generated Authoring Files and Runtime Facade
 
@@ -232,9 +257,9 @@ A failed generation blocks catalog reads/builds until repaired; do not serve las
 
 Verify through the consumer's actual commands and surfaces, not source inspection alone:
 
-1. Run the real PHP compiler/registered command from clean generated output with prepared PO inputs. Inspect PHP, MO and frontend artifacts; repeat unchanged input to check deterministic generation. Verify malformed NEON, missing/fuzzy PO/plural translations and placeholder mismatches fail without publishing partial output.
+1. Run the real PHP compiler/registered command (`texts:cache:compile` in Laravel apps) from clean generated output with prepared PO inputs, and confirm a failed compile exits nonzero. Inspect PHP, MO and frontend artifacts; repeat unchanged input to check deterministic generation. Verify malformed NEON, missing/fuzzy PO/plural translations and placeholder mismatches fail without publishing partial output.
 2. Generate first, then run the real standalone TypeScript/Vue typecheck, then production client and enabled SSR builds. Exercise each mode actually supported by the application; compilation success alone does not prove type resolution or macro transformation.
-3. Render singular, plural, named-placeholder and sanitized HTML cases in PHP/Vue as applicable. Check disallowed HTML/missing sanitizer and hostile interpolated markup. Verify two app instances and sequential SSR/native-locale requests do not leak state; inspect real browser hydration and locale switching.
+3. Render singular, plural, named-placeholder and sanitized HTML cases in PHP/Vue as applicable (in Laravel, Blade `@langText`/`@langHtmlText` per locale; in Nette, the `translator` service with the catalog domain bound by core). Check disallowed HTML/missing sanitizer and hostile interpolated markup. Verify two app instances and sequential SSR/native-locale requests do not leak state; inspect real browser hydration and locale switching.
 4. In real Vite development, edit NEON and translator PO without touching callers; verify browser output and already-evaluated SSR refresh. Edit ordinary Vue content and verify its normal HMR remains intact.
 5. If build-watch is used, exercise nested input creation/deletion and cleaned generated directories. Break compilation, observe blocked output/build failure, repair it and verify recovery without perpetual generated-file watch loops.
 6. In disposable artifacts, verify unknown format, identity mismatch, tampering and mixed generations are rejected. In compiled mode, also exercise rejected dynamic/escaped calls and confirm production output does not retain the runtime source lookup map.

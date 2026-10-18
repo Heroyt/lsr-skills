@@ -28,7 +28,7 @@ Foundation:
 
 Application core:
 
-- `lsr/core` — container bootstrap, `App`, request dispatch, controllers, sessions/cookies, Latte, links, translations, migration loading;
+- `lsr/core` — container bootstrap, `App`, request dispatch, controllers, sessions/cookies, Latte, links, translations (delegating to `lsr/translations` from the unreleased Core 0.7), migration loading;
 - `lsr/routing` — router, groups, middleware, localized routes, route attributes/cache;
 - `lsr/request` — PSR request/response factories, mapped request validation, response DTOs;
 - `lsr/caching`, `lsr/db`, `lsr/serializer`, `lsr/object-validation`, `lsr/orm` — persistence/data stack.
@@ -42,7 +42,8 @@ Optional orchestration:
 - `lsr/roadrunner` — HTTP/jobs workers and task production;
 - `lsr/scheduler` — Symfony Scheduler integration;
 - `lsr/otel` — OpenTelemetry providers and global SDK ownership, explicit log storage/opt-in Logger wiring since 0.1.6, separate PSR-3 correlation/export hooks, application tracing/metrics, lifecycle adapters, and runtime flush/shutdown handling;
-- `lsr/text-catalog` — standalone NEON source-copy loading/lookup and gettext/artifact compilation, with optional DI/console adapters; PHP 8.5 or newer;
+- `lsr/translations` — framework-neutral native gettext runtime (supported languages, locale/environment application, `MessageTranslator`) used by core 0.7+ and an optional Laravel 12/13 provider with a Blade `@gettext` directive; needs `ext-gettext`, PHP 8.4 or newer;
+- `lsr/text-catalog` — standalone NEON source-copy loading/lookup and gettext/artifact compilation, with optional Nette DI/console adapters and an optional Laravel 12/13 provider (Artisan compile command, Blade directives); PHP 8.5 or newer;
 - `lsr-text-catalog` — independently installed npm package for typed Vue/gettext facades and runtime/compiled Vite integration; not an LSR core requirement.
 
 Require optional packages only for real application behavior. Do not introduce a package merely because a skill exists.

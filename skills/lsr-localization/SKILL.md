@@ -1,15 +1,16 @@
 ---
 name: lsr-localization
-description: Use for LSR internationalization/localization with native gettext, PO/MO catalogs, contexts/plurals/domains, localized routes, sitemap hreflang alternatives and Latte, plus optional NEON source-copy catalogs, vue3-gettext, Inertia locale synchronization, and the boundary with ORM-owned multilingual content.
+description: Use for LSR internationalization/localization with native gettext (core Translations, the lsr/translations runtime and its Laravel provider), PO/MO catalogs, contexts/plurals/domains, localized routes, sitemap hreflang alternatives and Latte, plus optional NEON source-copy catalogs, vue3-gettext, Inertia locale synchronization, and the boundary with ORM-owned multilingual content.
 ---
 
 # LSR Localization with Gettext
 
-LSR's native gettext implementation is the backend UI-message translation authority. For Inertia + Vue 3, use the same gettext translations through `vue3-gettext`; do not create a separate UI translation system. Applications optionally using `lsr/text-catalog` and `lsr-text-catalog` should also follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for NEON source ownership, compiler artifacts and injected adapters. Neither package replaces application-owned locale selection. Database-backed multilingual content is a separate responsibility; see [ORM-owned content](#database-backed-multilingual-content).
+LSR's native gettext implementation is the backend UI-message translation authority. In Core 0.7 (unreleased) the shared gettext engine is the framework-neutral `lsr/translations` package, which `Lsr\Core\Translations` delegates to; Laravel applications can use the same runtime through its optional service provider. For Inertia + Vue 3, use the same gettext translations through `vue3-gettext`; do not create a separate UI translation system. Applications optionally using `lsr/text-catalog` and `lsr-text-catalog` should also follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for NEON source ownership, compiler artifacts and injected adapters. Neither package replaces application-owned locale selection. Database-backed multilingual content is a separate responsibility; see [ORM-owned content](#database-backed-multilingual-content).
 
 ## Read the Installed Backend
 
 - `vendor/lsr/core/src/Translations.php`
+- for Core 0.7+, `vendor/lsr/translations/src/*` (`SupportedLanguages`, `Locale`, `GettextEnvironment`, `Localization`, `GettextTranslator`, `MessageFormatter`)
 - `vendor/lsr/core/include/functions.php`
 - `src/Templating/{LatteExtension,TranslatorExtension}.php`
 - `src/Links/Generator.php` and installed localized routing APIs
@@ -28,6 +29,8 @@ lsr:
 		domains:
 			- UI
 ```
+
+Core 0.7 (unreleased) keeps these options and the full public `Translations` API; applications still on core ^0.3 are not migrated and run the previous implementation, so check `composer.lock` before relying on the behavior below.
 
 Read `LsrExtension::getConfigSchema()` for the installed version.
 
@@ -56,6 +59,47 @@ Current semantics support:
   vue-gettext-compatible named placeholders.
 
 Latte exposes LSR translation tags/functions/filters through the installed extensions. Prefer those over direct catalog access in templates.
+
+### `lsr/translations` Runtime
+
+`lsr/translations` 0.1.0 (`Lsr\Translations\`, PHP >=8.4, `ext-gettext`, `gettext/languages ^2.10`) is the native gettext runtime shared by core and Laravel. It is distributed through the LSR Satis (`https://packages.laserliga.cz`) and Packagist.
+
+- `SupportedLanguages` accepts a list (`['cs_CZ', 'en_US']`) or a map (`['cs' => 'CZ']` / `['cs' => 'cs_CZ']`); `resolve('cs' | 'cs_CZ')` returns a `Locale` (`code` `cs_CZ`, `languageId` `cs`, `country` `CZ`, CLDR `language`). List entries without a country throw `InvalidArgumentException`; unknown/unsupported languages throw `InvalidLanguageException`.
+- `GettextEnvironment(defaultDomain, directory, domains)` applies a `Locale` to process-global state: `LANGUAGE`/`LANG`/`LC_ALL` env, `setlocale` (`LC_ALL`, `LC_MESSAGES`) trying `cs_CZ`, `.UTF8`, `.UTF-8`, `.utf-8` and the language name, `bindtextdomain` + UTF-8 codeset for every domain, then `textdomain()`.
+- `Localization(SupportedLanguages, GettextEnvironment, defaultLanguage)` applies the default on construction; `setLocale()` is a no-op when the resolved code is unchanged.
+- `MessageTranslator::translate($message, $plural, $num, $context, $domain, $format)`; `GettextTranslator` implements it with `dgettext`, or `dngettext` whenever a non-empty plural is given (even for `num = 1`), strips an untranslated context prefix and formats through the [named/numeric placeholder rules](#named-placeholder-compatibility).
+
+The environment is process-global: apply locales sequentially. ZTS/FrankenPHP threads are unsafe, and long-running workers must re-apply the locale per request.
+
+### Core 0.7 Behavior Changes (unreleased)
+
+Review applications and tests before upgrading from core ^0.3:
+
+- `translate()` with a plural always uses `ngettext` (previously `gettext` when `num === 1`).
+- `translate()` with `num !== 1` and no plural now uses `gettext` (previously `ngettext` with an empty plural, which returned `''` when untranslated).
+- The `LANGUAGE` environment variable is also set on locale switch.
+- `CHECK_TRANSLATIONS` collection and `updateTranslations()` rewrite PO/MO/POT only for domains that actually received new messages; previously every loaded domain was rewritten, including domains owned by other tools such as the text catalog.
+- Supported-language list entries without `_COUNTRY` throw instead of being silently mis-mapped.
+- `Lsr\Core\Exceptions\InvalidLanguageException` now extends `Lsr\Translations\InvalidLanguageException` (still an `Exception`); core rethrows its own type.
+
+Latte `{lang}`/translate nodes, the `lang()` helper, the Tracy panel, `LanguagePrefixer` and `DefaultLanguageRedirect` are unchanged.
+
+### Laravel
+
+Laravel 12/13 applications can install `lsr/translations` alone (provider `Lsr\Translations\Laravel\TranslationsServiceProvider` is auto-discovered; `conflict: laravel/framework <12`). Publish config with `php artisan vendor:publish --tag=lsr-translations-config` (`config/lsr-translations.php`):
+
+| Key | Default |
+| --- | --- |
+| `directory` | `lang_path('gettext')` (`<locale>/LC_MESSAGES/<domain>.mo`, apart from Laravel's PHP/JSON files) |
+| `default_domain` | `'messages'` |
+| `domains` | `[]` (`domain => directory`, `null` uses `directory`) |
+| `default_language` | `'en_US'` |
+| `supported_languages` | `['en_US']` |
+
+- Laravel owns the locale. On first resolve and on `LocaleUpdated` the provider mirrors `App::getLocale()` into gettext (`cs` -> `cs_CZ`); an unsupported Laravel locale selects `default_language`. Do not add a second locale authority.
+- It also listens to `Laravel\Octane\Events\RequestReceived` and re-applies the sandbox locale, because Octane resets the locale without `LocaleUpdated`.
+- The provider binds `GettextTranslator`, aliased to `MessageTranslator`. Blade `@gettext(...)` echoes the escaped `translate(...)` result and accepts named arguments, for example `@gettext('Hello %{name}', format: ['name' => $name])`. Laravel's `@lang`/`__()` are untouched.
+- Native gettext is process-global and thread-unsafe (see above); verify the OS locales exist with `locale -a` on each deployment image, because gettext selects messages through the OS locale.
 
 ## Catalog Layout
 
@@ -99,7 +143,7 @@ Expose clear scripts such as `i18n:extract`, `i18n:validate`, and `i18n:compile`
 
 For package-owned catalogs, use `TextCatalogCompiler` instead: it loads NEON, maintains POT/PO with semantic-key contexts, validates translations, and produces MO plus the PHP cache and optional `catalog.ts`, `catalog.compiled.ts`, and format-v1 `catalog.build.json`. Follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for the build contract. Do not extract compiled macros/generated output or independently run the generic PHP/Latte/Vue extractor against package-owned catalogs; keep any remaining direct-gettext catalogs under explicitly separate ownership.
 
-For direct-gettext catalogs, `Translations` can collect missing messages at runtime when `CHECK_TRANSLATIONS` and Tracy/debug behavior enable it, then write PO/MO/POT through `updateTranslations()`. Treat this as a development bridge, not the preferred deterministic extractor or a writer for package-owned catalogs. Never enable catalog mutation in production workers.
+For direct-gettext catalogs, `Translations` can collect missing messages at runtime when `CHECK_TRANSLATIONS` and Tracy/debug behavior enable it, then write PO/MO/POT through `updateTranslations()`. Treat this as a development bridge, not the preferred deterministic extractor or a writer for package-owned catalogs. In Core 0.7 (unreleased) only domains that actually received new messages are rewritten; earlier versions rewrote every loaded domain. Never enable catalog mutation in production workers.
 
 The build must fail when catalog validation or compilation fails. Production startup must consume immutable compiled artifacts; it must not compile or mutate catalogs.
 
@@ -203,6 +247,7 @@ Content availability and translated parameter values remain application-owned. F
 - Named placeholders match and interpolate identically.
 - Backend locale drives route, PHP/Latte, Inertia props, Vue catalog instance/bundle, `<html lang>`, and `Intl` formatting.
 - Two sequential RoadRunner requests with different locales remain isolated.
+- With Laravel, `App::setLocale('cs')`, an unsupported locale and (Octane) consecutive requests select the expected gettext locale; `locale -a` lists the required OS locales.
 - Fuzzy/obsolete/missing entries follow the documented release policy.
 - Localized sitemap URLs and alternate maps agree on available translations, include self/reciprocal links, and match before/after compiled-route cache hydration.
 - Run backend tests/static analysis, frontend typecheck/tests/build, and a browser language-switch smoke flow.
