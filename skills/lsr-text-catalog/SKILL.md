@@ -17,10 +17,10 @@ Read the consumer's manifests/locks and actual installed exports before adapting
 
 - PHP package README and `composer.json`; `src/{CatalogConfig,TextCatalogLoader,TextCatalog,TextCatalogCompiler}.php`.
 - Optional `src/Di/TextCatalogExtension.php`, `src/Laravel/TextCatalogServiceProvider.php` with `config/text-catalog.php`, `src/Console/CompileTextCatalogCommand.php` and `src/Translation/TextTranslator.php`; with the translator, the installed `vendor/lsr/translations/src/{MessageTranslator,GettextTranslator,GettextEnvironment}.php`.
-- npm README and `package.json`; `src/{types,language}.ts`, `src/{runtime,compiled}/index.ts`, and `src/vite/{index,manifest,transform}.ts`.
+- npm README and `package.json`; `src/{types,registry,group}.ts`, `src/{runtime,compiled}/index.ts`, and `src/vite/{index,manifest,transform}.ts`.
 - Consumer compiler entrypoint, source/PO directories, generated output, real facades, Vite root/aliases and typecheck/build scripts.
 
-The packages are independently installed and versioned: Composer `lsr/text-catalog` and npm `lsr-text-catalog`. Read each installed manifest for its package version; artifact format **1** is a separate compatibility contract. Tags and installation instructions do not establish registry publication; verify availability before selecting a registry version.
+The packages are independently installed and versioned: Composer `lsr/text-catalog` and npm `lsr-text-catalog`. Read each installed manifest for its package version; the artifact format is a separate compatibility contract. Format **2** (lazy per-group/per-locale modules) requires `lsr/text-catalog` **0.3.0+** and `lsr-text-catalog` **0.2.0+**; earlier releases read/write monolithic format **1** and are mutually incompatible with it, so upgrade both packages together and regenerate (see the npm README's migration section). Tags and installation instructions do not establish registry publication; verify availability before selecting a registry version.
 
 - PHP requires **>=8.5**, `ext-dom`, `ext-libxml`, `nette/neon ^3.4` and `gettext/gettext ^5.7`. Do not reuse the older PHP >=8.4 floor of current LSR core/console packages.
 - Loading/compiling needs no LSR framework, DI container, native gettext extension, Node, Vue or Redis. `TextTranslator` (`lsr/text-catalog` 0.2.0+) only *suggests* `lsr/translations ^0.1`, which provides the `MessageTranslator` it calls and itself requires `ext-gettext`; the catalog package no longer checks `ext-gettext` itself.
@@ -147,9 +147,11 @@ Frontend generation emits ordinary consumer-owned files:
 
 | File | Contract |
 | --- | --- |
-| `catalog.ts` | Source map/lookup, `TextKey`, `HtmlTextKey`, `htmlTextKeys`, locales and contextual translations. |
-| `catalog.compiled.ts` | Key unions, locales/translations and declaration-only `text` macro; no runtime source map. |
-| `catalog.build.json` | Format 1 identity, source/HTML/plural snapshot, artifact SHA-256 digests and generation digest. |
+| `catalog.ts` | `TextKey`, `HtmlTextKey`, `TextGroup`, `htmlTextKeys`, locales and `catalogGroups` lazy loaders for source copy and translations. |
+| `catalog.compiled.ts` | Key/group unions, locales, translation-only `catalogGroups` loaders and declaration-only `text` macro; no source copy. |
+| `texts/<group>.ts` | Source copy of one group (root catalog key), runtime mode only. |
+| `texts/<group>.<locale>.ts` | Translations of one group for one **non-source** locale; the source locale ships none. |
+| `catalog.build.json` | Format 2 identity, source/HTML/plural snapshot, SHA-256 digests of every artifact (including each group module) and generation digest. |
 
 Generated types import `lsr-text-catalog/types`. Keep files resolvable by ordinary TypeScript before Vite starts: **generate before standalone `tsc`/`vue-tsc`**. Do not replace them with Vite-only virtual declarations or invent a globally registered key union.
 
@@ -160,28 +162,42 @@ import * as generated from '../generated/catalog.js';
 import { createRuntimeCatalog } from 'lsr-text-catalog/runtime';
 
 export const {
-  text, langText, langTextPlural, langHtmlText, createCatalog, installCatalog,
+  text, langText, langTextPlural, langHtmlText, createCatalog, installCatalog, loadTexts, loadLocale,
 } = createRuntimeCatalog(generated);
-export type { TextKey, HtmlTextKey } from '../generated/catalog.js';
+export type { TextKey, HtmlTextKey, TextGroup } from '../generated/catalog.js';
 ```
 
 Runtime is the default and supports typed dynamic keys. `text(key)` only returns source copy; `langText` and `langTextPlural` translate/interpolate. HTML membership is checked at runtime, and HTML calls throw without a sanitizer. Supply an application sanitizer through `createRuntimeCatalog({ ...generated, sanitizeHtml })` or per-instance options; never use an identity/no-op sanitizer to make HTML calls pass.
 
-Create/install fresh mutable state for **each Vue app and SSR request**:
+Create/install fresh mutable state for **each Vue app and SSR request**, after awaiting its locale:
 
 ```ts
 import { createSSRApp } from 'vue';
 import App from './App.vue';
-import { createCatalog, installCatalog } from './copy.js';
+import { createCatalog, installCatalog, loadLocale } from './copy.js';
 
+await loadLocale('en_US');
 const app = createSSRApp(App);
 const copy = createCatalog({ locale: 'en_US' });
 installCatalog(app, copy);
 ```
 
-Use the application's selected configured locale, not a second language-selection authority. Update that instance through `copy.gettext.current` when application locale changes; keep backend, routes, HTML language and `Intl` mappings synchronized. Match initial locale, translations and sanitizer policy between SSR and hydration. Request-specific sanitizer/DOM lifetimes can use `createCatalog({ locale, sanitizeHtml })`.
+Use the application's selected configured locale, not a second language-selection authority. Switch an instance with `await copy.setLocale(locale)` (loads, then sets `gettext.current`); never assign `gettext.current` directly to an unloaded locale. Keep backend, routes, HTML language and `Intl` mappings synchronized. Match initial locale, loaded groups and sanitizer policy between SSR and hydration: on the client, `await loadLocale(locale)` before resolving the first page. Request-specific sanitizer/DOM lifetimes can use `createCatalog({ locale, sanitizeHtml })`.
 
-Each instance clones nested translation/plural data; each facade has its own injection key. Imported helpers select the current app **at invocation**, not module initialization. Outside injection context they use a private fixed source-language fallback; locale-sensitive non-Vue runtime code must call explicit instance helpers. Compiled instances expose `gettext` and `htmlPgettext`, not runtime key lookup helpers. Never store one request's mutable instance in a module singleton.
+Each instance clones nested translation/plural data; each facade has its own injection key. Imported helpers select the current app **at invocation**, not module initialization. Outside injection context they use a private fixed source-language fallback; locale-sensitive non-Vue runtime code must call explicit instance helpers. Compiled instances expose `gettext`, `htmlPgettext` and `setLocale`, not runtime key lookup helpers. Never store one request's mutable instance in a module singleton.
+
+### Lazy groups and locales
+
+A group is the root segment of a key (`checkout.total` → `checkout`). The facade, shared by all its apps/requests, holds immutable loaded data: `loadTexts(groups?)` requires groups (all when omitted) and loads them for every activated locale (runtime also loads their source copy); `loadLocale(locale)` activates a locale and loads all required groups for it. Later loads merge into live instances. Using a key whose group is not loaded for the current locale **throws**; it never silently falls back to source-language copy.
+
+- Compiled mode needs no explicit group loading: each transformed module imports `virtual:lsr-text-catalog/group/<group>`, which top-level-awaits its group before the importer runs, so bundlers place translations next to the pages using them and only the active locale is fetched. The build target must support top-level await. A source-locale-only catalog emits no group imports and ships no translation data. The barrier covers configured locales only; locales an application installs on `gettext` itself pass through.
+- Runtime mode with the plugin imports the group of every string literal equal to a catalog key (direct calls and finite key maps); only keys assembled at run time (`` `shop.${name}` ``) need an explicit `loadTexts([...groups])`. Without the plugin, call `loadTexts()` yourself.
+- Group modules load through the package keyed by the generated `catalogGroups` object, so facades need not export `loadTexts`, but must pass the generated `catalogGroups` through (`{ ...generated }`).
+- Group modules never reject: a failure becomes the `cause` of the "not loaded" error, and that use retries in the background. In production bundles the first group module of a chunk starts every group of that chunk in parallel.
+- `copy.setLocale()` is latest-call-wins and deactivates locales no live instance displays; instances copy only the locales they display; SSR instances are released weakly. Locales are typed from the generated `locales` tuple.
+- Preload after SSR: the plugin emits `.vite/text-catalog.json` into the client build; `catalogPreloadFiles(manifest, copy.usedGroups(), locale)` from `lsr-text-catalog/preload` lists the build files to `<link rel="modulepreload">` (prefix the build `base`).
+- Generated `texts/<group>.ts` stores keys relative to the group (`""` for a root leaf); never read or edit generated modules directly.
+- Disable splitting per dimension with the plugin's `split: { groups?: boolean, locales?: boolean }` (both default `true`): `groups: false` delivers all groups of a locale in one module, `locales: false` all locales of a group (instant `setLocale`), both `false` one module. The plugin resolves the generated loaders of a bundle to one module/chunk; the loading API and the throw-on-unloaded barrier are unchanged. Never edit generated loaders; selective merging beyond `split` belongs to Rolldown `output.codeSplitting.groups`.
 
 Use Composition API and escaped rendering:
 
@@ -202,7 +218,7 @@ const label = computed(() => langText('example.title', { name: 'Ada' }));
 
 Only deliberately declared HTML passed through `langHtmlText` with the final-output sanitizer may reach raw rendering such as `v-html`. The package imposes no application-specific HTML policy or sanitizer dependency.
 
-## Vite Runtime Default and Strict Compiled Opt-In
+## Vite: Runtime for Development, Compiled for Production
 
 Use the same explicit paths, domain and **ordered locale list** as PHP. Paths are relative to Vite root (or explicit plugin `root`) unless absolute; input directories must not overlap `frontendDirectory`.
 
@@ -212,14 +228,15 @@ import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vite';
 import { textCatalog } from 'lsr-text-catalog/vite';
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [
     textCatalog({
-      mode: 'runtime',
+      mode: command === 'build' ? 'compiled' : 'runtime', // plugin default: 'runtime'
       sourceDirectory: 'copy',
       languageDirectory: 'languages',
       frontendDirectory: 'generated',
       facade: 'src/copy.ts',
+      compiledFacade: 'src/copy.compiled.ts',
       domain: 'example',
       sourceLocale: 'en_US',
       locales: ['en_US'],
@@ -229,19 +246,19 @@ export default defineConfig({
     }),
     vue(),
   ],
-});
+}));
 ```
 
 The consumer owns the compiler callback, command, environment and bootstrap; it may return a promise. PHP is needed only when that callback invokes it. Prebuilt runtime consumers need not use this plugin.
 
-To opt into `mode: 'compiled'`, also set `compiledFacade: 'src/copy.compiled.ts'` and create that distinct file:
+Compiled mode needs the distinct `compiledFacade` file:
 
 ```ts
 import * as generated from '../generated/catalog.compiled.js';
 import { createCompiledCatalog } from 'lsr-text-catalog/compiled';
 
 export const {
-  pgettext, npgettext, htmlPgettext, createCatalog, installCatalog,
+  pgettext, npgettext, htmlPgettext, createCatalog, installCatalog, loadTexts, loadLocale,
 } = createCompiledCatalog(generated);
 ```
 
@@ -251,7 +268,7 @@ Compiled calls require literal keys, direct helper calls and valid sibling plura
 
 ## Failure Barriers and Verification
 
-The compiler validates/renders all locales and representations before publication, stages output, publishes the manifest last and rolls back handled replacement failures. This is not a distributed transaction. Vite validates format **1**, exact identity, key references, safe artifact paths, exact-byte SHA-256 hashes and the canonical generation digest; it also rejects a generation changing while read. Missing/unknown formats, tampering and mixed outputs fail even after a successful compiler callback.
+The compiler validates/renders all locales and representations before publication, stages output, publishes the manifest last, rolls back handled replacement failures and then removes stale `texts/*.ts` modules. It fails without publishing when generated `texts/` paths differ only by letter case (groups such as `fooBar`/`foobar`). This is not a distributed transaction. Vite validates format **2**, exact identity, key references, the exact group/locale module set, safe artifact paths, exact-byte SHA-256 hashes and the canonical generation digest; it serves `texts/` modules only from that validated generation and rejects a generation changing while read. Missing/unknown formats, tampering and mixed outputs fail even after a successful compiler callback.
 
 A failed generation blocks catalog reads/builds until repaired; do not serve last-good output as a hidden fallback. Client, SSR and custom environments must consume one coherent validated generation, not stale in-flight work.
 
@@ -259,7 +276,7 @@ Verify through the consumer's actual commands and surfaces, not source inspectio
 
 1. Run the real PHP compiler/registered command (`texts:cache:compile` in Laravel apps) from clean generated output with prepared PO inputs, and confirm a failed compile exits nonzero. Inspect PHP, MO and frontend artifacts; repeat unchanged input to check deterministic generation. Verify malformed NEON, missing/fuzzy PO/plural translations and placeholder mismatches fail without publishing partial output.
 2. Generate first, then run the real standalone TypeScript/Vue typecheck, then production client and enabled SSR builds. Exercise each mode actually supported by the application; compilation success alone does not prove type resolution or macro transformation.
-3. Render singular, plural, named-placeholder and sanitized HTML cases in PHP/Vue as applicable (in Laravel, Blade `@langText`/`@langHtmlText` per locale; in Nette, the `translator` service with the catalog domain bound by core). Check disallowed HTML/missing sanitizer and hostile interpolated markup. Verify two app instances and sequential SSR/native-locale requests do not leak state; inspect real browser hydration and locale switching.
+3. Render singular, plural, named-placeholder and sanitized HTML cases in PHP/Vue as applicable (in Laravel, Blade `@langText`/`@langHtmlText` per locale; in Nette, the `translator` service with the catalog domain bound by core). Check disallowed HTML/missing sanitizer and hostile interpolated markup. Verify two app instances and sequential SSR/native-locale requests do not leak state; inspect real browser hydration and locale switching, and confirm in the browser's network panel that a page fetches only its groups' chunks for the active locale.
 4. In real Vite development, edit NEON and translator PO without touching callers; verify browser output and already-evaluated SSR refresh. Edit ordinary Vue content and verify its normal HMR remains intact.
 5. If build-watch is used, exercise nested input creation/deletion and cleaned generated directories. Break compilation, observe blocked output/build failure, repair it and verify recovery without perpetual generated-file watch loops.
 6. In disposable artifacts, verify unknown format, identity mismatch, tampering and mixed generations are rejected. In compiled mode, also exercise rejected dynamic/escaped calls and confirm production output does not retain the runtime source lookup map.

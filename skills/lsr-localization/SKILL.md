@@ -141,7 +141,7 @@ For direct-gettext catalogs without the text-catalog packages, own the full upda
 
 Expose clear scripts such as `i18n:extract`, `i18n:validate`, and `i18n:compile`; make them idempotent and run validation/compilation in CI.
 
-For package-owned catalogs, use `TextCatalogCompiler` instead: it loads NEON, maintains POT/PO with semantic-key contexts, validates translations, and produces MO plus the PHP cache and optional `catalog.ts`, `catalog.compiled.ts`, and format-v1 `catalog.build.json`. Follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for the build contract. Do not extract compiled macros/generated output or independently run the generic PHP/Latte/Vue extractor against package-owned catalogs; keep any remaining direct-gettext catalogs under explicitly separate ownership.
+For package-owned catalogs, use `TextCatalogCompiler` instead: it loads NEON, maintains POT/PO with semantic-key contexts, validates translations, and produces MO plus the PHP cache and optional `catalog.ts`, `catalog.compiled.ts`, lazily loaded per-group/per-locale `texts/` modules and the format-2 `catalog.build.json`. Follow [lsr-text-catalog](../lsr-text-catalog/SKILL.md) for the build contract. Do not extract compiled macros/generated output or independently run the generic PHP/Latte/Vue extractor against package-owned catalogs; keep any remaining direct-gettext catalogs under explicitly separate ownership.
 
 For direct-gettext catalogs, `Translations` can collect missing messages at runtime when `CHECK_TRANSLATIONS` and Tracy/debug behavior enable it, then write PO/MO/POT through `updateTranslations()`. Treat this as a development bridge, not the preferred deterministic extractor or a writer for package-owned catalogs. In Core 0.7 only domains that actually received new messages are rewritten; earlier versions rewrote every loaded domain. Never enable catalog mutation in production workers.
 
@@ -172,7 +172,7 @@ For direct-gettext applications using Vue 3/Inertia:
 - keep the frontend entrypoint limited to provider wiring;
 - do not add a second reactive locale source.
 
-With `lsr-text-catalog`, consume the package-generated catalog instead of creating a separate JSON/gettext provider. Create and install a catalog instance per Vue app and SSR request; synchronize its `gettext.current` from backend-owned locale props. Coordinate SSR/hydration locale and the application sanitizer's policy and resource lifetime as described in [lsr-text-catalog](../lsr-text-catalog/SKILL.md).
+With `lsr-text-catalog`, consume the package-generated catalog instead of creating a separate JSON/gettext provider. Create and install a catalog instance per Vue app and SSR request; follow backend-owned locale props with `await copy.setLocale(locale)` (it loads the locale's groups before switching) and `await loadLocale(locale)` before the first render. Coordinate SSR/hydration locale and the application sanitizer's policy and resource lifetime as described in [lsr-text-catalog](../lsr-text-catalog/SKILL.md).
 
 The backend owns active locale. Shared Inertia props should include at least:
 
@@ -242,7 +242,7 @@ Content availability and translated parameter values remain application-owned. F
 ## Verification
 
 - The selected extraction/compiler pipeline is deterministic and idempotent; no competing writer modifies package-owned catalogs.
-- Every PO validates and compiles to MO; direct-gettext Vue builds produce locale JSON, while text-catalog builds produce PHP and optional TypeScript/format-v1 manifest artifacts before frontend typechecking/build.
+- Every PO validates and compiles to MO; direct-gettext Vue builds produce locale JSON, while text-catalog builds produce PHP and optional TypeScript/format-2 manifest artifacts before frontend typechecking/build.
 - PHP and Vue render equivalent singular, contextual, plural, and contextual-plural examples.
 - Named placeholders match and interpolate identically.
 - Backend locale drives route, PHP/Latte, Inertia props, Vue catalog instance/bundle, `<html lang>`, and `Intl` formatting.
